@@ -36,6 +36,7 @@
     returnModal: null,
     focusModal: false,
     taskFilter: { status: "pendentes", courseId: "all", projectId: "all", priority: "all", type: "all", q: "" },
+    taskLayout: "list",
     calMode: "month",
     calDate: new Date(),
   };
@@ -79,6 +80,17 @@
       badge.hidden = alerts === 0;
       badge.textContent = alerts > 9 ? "9+" : String(alerts);
     });
+
+    var switcher = document.getElementById("layout-switch");
+    if (switcher) {
+      switcher.hidden = view !== "tasks";
+      switcher.querySelectorAll("button").forEach(function (button) {
+        var on = button.dataset.layout === UI.taskLayout;
+        button.classList.toggle("is-selected", on);
+        if (on) button.setAttribute("aria-pressed", "true");
+        else button.setAttribute("aria-pressed", "false");
+      });
+    }
 
     var overdue = Store.overdueTasks().length;
     document.title = (overdue ? "(" + overdue + ") " : "") + pageTitle(view) + " · TriBalance";
@@ -252,6 +264,7 @@
       dates: dates,
       dueTime: val(form, "dueTime"),
       notes: val(form, "notes").trim(),
+      stage: done ? "feita" : (existing && existing.stage === "curso" ? "curso" : "fazer"),
       done: done,
       doneAt: done ? ((existing && existing.doneAt) || H.todayISO()) : null,
       reminders: reminders,
@@ -594,6 +607,11 @@
       confirmYes();
       return;
     }
+    if (action === "task-layout") {
+      UI.taskLayout = el.dataset.layout === "kanban" ? "kanban" : "list";
+      render();
+      return;
+    }
     if (action === "toggle-task") {
       var toggled = Store.toggleTask(el.dataset.id);
       if (toggled) toast(toggled.done ? "Tarefa concluída." : "Tarefa reaberta.");
@@ -715,6 +733,12 @@
 
   document.addEventListener("change", function (event) {
     var target = event.target;
+    if (target.matches("[data-stage-for]")) {
+      var moved = Store.setTaskStage(target.dataset.stageFor, target.value);
+      if (moved) toast(moved.stage === "feita" ? "Tarefa concluída." : moved.stage === "curso" ? "Tarefa em curso." : "Tarefa por fazer.");
+      render();
+      return;
+    }
     if (target.matches("[data-filter]")) {
       UI.taskFilter[target.dataset.filter] = target.value;
       render();
@@ -752,6 +776,41 @@
     if (!el || el.tagName === "BUTTON" || el.tagName === "A" || el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") return;
     event.preventDefault();
     el.click();
+  });
+
+  document.addEventListener("dragstart", function (event) {
+    var card = event.target.closest(".kanban-card");
+    if (!card || event.target.closest("button, select, a")) return;
+    event.dataTransfer.setData("text/plain", card.dataset.id);
+    event.dataTransfer.effectAllowed = "move";
+    card.classList.add("is-dragging");
+  });
+
+  document.addEventListener("dragend", function (event) {
+    var card = event.target.closest(".kanban-card");
+    if (card) card.classList.remove("is-dragging");
+    document.querySelectorAll(".kanban-col.is-over").forEach(function (col) { col.classList.remove("is-over"); });
+  });
+
+  document.addEventListener("dragover", function (event) {
+    var col = event.target.closest(".kanban-col");
+    if (!col) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    document.querySelectorAll(".kanban-col.is-over").forEach(function (item) {
+      if (item !== col) item.classList.remove("is-over");
+    });
+    col.classList.add("is-over");
+  });
+
+  document.addEventListener("drop", function (event) {
+    var col = event.target.closest(".kanban-col");
+    if (!col) return;
+    event.preventDefault();
+    var id = event.dataTransfer.getData("text/plain");
+    var moved = Store.setTaskStage(id, col.dataset.stage);
+    if (moved) toast(moved.stage === "feita" ? "Tarefa concluída." : moved.stage === "curso" ? "Tarefa em curso." : "Tarefa por fazer.");
+    render();
   });
 
   window.addEventListener("hashchange", function () {

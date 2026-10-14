@@ -209,13 +209,59 @@
     );
   }
 
+  function kanbanCard(task) {
+    var course = Store.course(task.courseId);
+    var overdue = H.isOverdue(task);
+    var stage = task.stage === "curso" || task.stage === "feita" ? task.stage : "fazer";
+    var options = [
+      { id: "fazer", label: "Por fazer" },
+      { id: "curso", label: "Em curso" },
+      { id: "feita", label: "Concluída" },
+    ].map(function (option) {
+      return '<option value="' + option.id + '"' + (option.id === stage ? " selected" : "") + ">" + option.label + "</option>";
+    }).join("");
+    return (
+      '<article class="kanban-card' + (task.done ? " is-done" : "") + (overdue ? " is-overdue" : "") + '" draggable="true" data-id="' + task.id + '">' +
+      '<div class="task-line"><h3 class="task-title">' + H.esc(task.title) + "</h3>" +
+      '<span class="badge badge-' + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span></div>" +
+      '<p class="task-meta">' + courseDot(course) + "<span>" + H.esc(placeText(task)) + "</span><span>·</span><span>" + H.esc(H.typeLabel(task.type)) + "</span><span>·</span><span class=\"" + (overdue ? "danger" : "") + '">' + H.esc(H.relativeDue(task)) + "</span></p>" +
+      '<div class="kanban-foot"><select data-stage-for="' + task.id + '" aria-label="Mover ' + H.esc(task.title) + '">' + options + "</select>" +
+      '<div class="task-actions">' +
+      (task.done ? '<button type="button" class="btn btn-ghost btn-sm" data-action="open-archive" data-id="' + task.id + '">Arquivar</button>' : "") +
+      '<button type="button" class="icon-btn" data-action="open-task" data-id="' + task.id + '" aria-label="Editar tarefa">' + Icons.ui("edit") + "</button>" +
+      '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="task" data-id="' + task.id + '" aria-label="Eliminar tarefa">' + Icons.ui("trash") + "</button>" +
+      "</div></div></article>"
+    );
+  }
+
+  function kanbanBoard(tasks) {
+    var columns = [
+      { id: "fazer", title: "Por fazer" },
+      { id: "curso", title: "Em curso" },
+      { id: "feita", title: "Concluídas" },
+    ];
+    return '<div class="kanban">' + columns.map(function (column) {
+      var cards = tasks.filter(function (task) {
+        var stage = task.stage === "curso" || task.stage === "feita" ? task.stage : "fazer";
+        return stage === column.id;
+      });
+      return (
+        '<section class="kanban-col" data-stage="' + column.id + '">' +
+        '<header class="kanban-head"><h2>' + column.title + "</h2><span>" + cards.length + "</span></header>" +
+        (cards.length ? cards.map(kanbanCard).join("") : '<p class="muted kanban-empty">Sem tarefas</p>') +
+        "</section>"
+      );
+    }).join("") + "</div>";
+  }
+
   function tasks() {
     var filter = UI.taskFilter;
+    var kanban = UI.taskLayout === "kanban";
     var filtered = Store.sortTasks(Store.state.tasks.filter(function (task) {
       if (task.archived) return false;
-      if (filter.status === "pendentes" && task.done) return false;
-      if (filter.status === "concluidas" && !task.done) return false;
-      if (filter.status === "atrasadas" && !H.isOverdue(task)) return false;
+      if (!kanban && filter.status === "pendentes" && task.done) return false;
+      if (!kanban && filter.status === "concluidas" && !task.done) return false;
+      if (!kanban && filter.status === "atrasadas" && !H.isOverdue(task)) return false;
       if (filter.courseId !== "all" && task.courseId !== filter.courseId) return false;
       if (filter.projectId && filter.projectId !== "all" && task.projectId !== filter.projectId) return false;
       if (filter.priority !== "all" && task.priority !== filter.priority) return false;
@@ -239,7 +285,7 @@
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova " + H.esc(H.term("tarefa").toLowerCase()) + "</button></div></header>" +
       '<div class="filters">' +
       '<label class="search">' + Icons.ui("search") + '<input id="task-search" type="search" placeholder="Procurar" value="' + H.esc(filter.q || "") + '"></label>' +
-      select("status", filter.status, '<option value="pendentes">Pendentes</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas</option><option value="todas">Todas</option>') +
+      (kanban ? "" : select("status", filter.status, '<option value="pendentes">Pendentes</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas</option><option value="todas">Todas</option>')) +
       '<select data-filter="courseId">' + courseOptions + "</select>" +
       '<select data-filter="projectId">' + projectOptions + "</select>" +
       select("priority", filter.priority, '<option value="all">Todas as prioridades</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>') +
@@ -247,7 +293,10 @@
         return '<option value="' + type.id + '">' + H.esc(H.term(type.id)) + "</option>";
       }).join("")) +
       "</div>" +
-      (filtered.length ? '<div class="task-list">' + filtered.map(taskRow).join("") + "</div>" : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa.")) +
+      (kanban ? '<p class="hint kanban-hint">Arrasta um cartão para outra coluna, ou escolhe a coluna no próprio cartão.</p>' : "") +
+      (kanban
+        ? (filtered.length ? kanbanBoard(filtered) : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa."))
+        : (filtered.length ? '<div class="task-list">' + filtered.map(taskRow).join("") + "</div>" : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa."))) +
       "</section>"
     );
   }

@@ -89,6 +89,7 @@
       item.dates = [];
       item.projectId = item.id === "t1" ? "p1" : "";
       item.archived = false;
+      item.stage = item.id === "t1" ? "curso" : (item.done ? "feita" : "fazer");
       if (item.done) item.doneAt = item.dueDate;
       if (item.id === "t3") {
         item.when = "periodo";
@@ -279,6 +280,10 @@
         startDate = dueDate;
         dates = [];
       }
+      var stage = item.stage === "fazer" || item.stage === "curso" || item.stage === "feita"
+        ? item.stage
+        : (item.done ? "feita" : "fazer");
+      var done = stage === "feita";
       return {
         id: item.id || H.uid(),
         title: item.title || "Tarefa",
@@ -291,8 +296,9 @@
         dates: dates,
         dueTime: item.dueTime || "",
         priority: item.priority || "media",
-        done: Boolean(item.done),
-        doneAt: item.done ? (item.doneAt || item.dueDate || dueDate) : null,
+        stage: stage,
+        done: done,
+        doneAt: done ? (item.doneAt || item.dueDate || dueDate) : null,
         reminders: Array.isArray(item.reminders) ? item.reminders.map(Number) : [1, 7],
         notes: item.notes || "",
         archived: Boolean(item.archived),
@@ -663,8 +669,15 @@
     toggleTask: function (id) {
       var item = state.tasks.filter(function (task) { return task.id === id; })[0];
       if (!item || item.archived) return null;
-      item.done = !item.done;
-      item.doneAt = item.done ? H.todayISO() : null;
+      return this.setTaskStage(id, item.done || item.stage === "feita" ? "fazer" : "feita");
+    },
+    setTaskStage: function (id, stage) {
+      var item = state.tasks.filter(function (task) { return task.id === id; })[0];
+      if (!item || item.archived) return null;
+      if (stage !== "fazer" && stage !== "curso" && stage !== "feita") return null;
+      item.stage = stage;
+      item.done = stage === "feita";
+      item.doneAt = item.done ? (item.doneAt || H.todayISO()) : null;
       save();
       return item;
     },
@@ -672,6 +685,7 @@
       var item = state.tasks.filter(function (task) { return task.id === id; })[0];
       if (!item) return null;
       item.archived = true;
+      item.stage = "feita";
       item.done = true;
       item.doneAt = item.doneAt || H.todayISO();
       if (grade && item.courseId) {

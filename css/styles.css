@@ -124,7 +124,23 @@ body.modal-open { overflow: hidden; }
   text-transform: uppercase;
   color: var(--muted);
 }
+.layout-switch { margin-left: 8px; }
+.layout-switch .segment button { padding: 6px 14px; flex: none; }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.kanban { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; align-items: start; overflow-x: auto; padding-bottom: 8px; }
+.kanban-col { background: rgba(255, 252, 247, 0.72); border: 1px solid var(--line); border-radius: 16px; padding: 12px; min-height: 240px; }
+.kanban-col.is-over { box-shadow: inset 0 0 0 2px var(--accent); }
+.kanban-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.kanban-head h2 { font-size: 14px; font-weight: 750; }
+.kanban-head span { color: var(--muted); font-size: 12px; font-weight: 750; }
+.kanban-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 8px; cursor: grab; }
+.kanban-card.is-overdue { box-shadow: inset 3px 0 0 var(--red); }
+.kanban-card.is-done .task-title { text-decoration: line-through; color: var(--muted); }
+.kanban-card.is-dragging { opacity: 0.45; }
+.kanban-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.kanban-foot select { padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: white; font-size: 12px; font-weight: 700; }
+.kanban-empty { margin: 8px 2px 4px; }
+.kanban-hint { margin: -4px 0 12px; }
 .topbar .menu-btn { display: none; }
 .bell-btn { position: relative; }
 .bell-count { position: absolute; top: -2px; right: -2px; margin: 0; }
