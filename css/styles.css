@@ -141,6 +141,26 @@ body.modal-open { overflow: hidden; }
 .kanban-foot select { padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: white; font-size: 12px; font-weight: 700; }
 .kanban-empty { margin: 8px 2px 4px; }
 .kanban-hint { margin: -4px 0 12px; }
+.plain-title, .back-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.back-link { color: var(--muted); font-size: 13px; font-weight: 750; margin-bottom: 8px; }
+.course-card .body p, .pre { white-space: pre-wrap; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.chip-btn { border: 1px solid var(--line); background: white; border-radius: 99px; padding: 7px 12px; font-weight: 750; font-size: 13px; }
+.chip-btn.is-selected { background: var(--ink); color: white; border-color: var(--ink); }
+.etapa { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+.etapa-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.etapa-head h2 { font-size: 18px; }
+.etapa-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.kind-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kind-btn { border: 1px solid var(--line); background: white; border-radius: 12px; padding: 16px 8px; font-weight: 750; }
+.kind-btn:hover { border-color: var(--accent); }
+.item-card { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.item-card p { margin-top: 6px; white-space: pre-wrap; }
+.item-card a { color: var(--accent); font-weight: 700; }
+.check-items { list-style: none; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.check-items li { display: flex; align-items: center; gap: 8px; }
+.check-items .is-done { text-decoration: line-through; color: var(--muted); }
+.stack { display: flex; flex-direction: column; gap: 8px; }
 .topbar .menu-btn { display: none; }
 .bell-btn { position: relative; }
 .bell-count { position: absolute; top: -2px; right: -2px; margin: 0; }
@@ -579,7 +599,7 @@ button.kpi:hover { border-color: #d8cec0; }
   .page-actions { margin-top: 12px; }
   h1 { font-size: 36px; }
   .global-grade strong { font-size: 52px; }
-  .staff-row, .room-row, .schedule-row { grid-template-columns: 1fr; }
+  .staff-row, .room-row, .schedule-row, .kind-grid { grid-template-columns: 1fr; }
   .schedule-row span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

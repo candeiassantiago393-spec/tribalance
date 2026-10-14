@@ -11,6 +11,7 @@
       courses: [],
       projects: [],
       events: [],
+      items: [],
       tasks: [],
       grades: [],
       sessions: [],
@@ -88,6 +89,7 @@
       item.startDate = item.dueDate;
       item.dates = [];
       item.projectId = item.id === "t1" ? "p1" : "";
+      item.etapaId = item.id === "t1" ? "e1" : "";
       item.archived = false;
       item.stage = item.id === "t1" ? "curso" : (item.done ? "feita" : "fazer");
       if (item.done) item.doneAt = item.dueDate;
@@ -105,10 +107,10 @@
     });
 
     data.projects = [
-      { id: "p1", name: "Protótipo de IPM", description: "Ecrãs principais e fluxo de navegação.", color: "#c6532a", icon: "compass", archived: false },
+      { id: "p1", name: "Protótipo de IPM", description: "Ecrãs principais e fluxo de navegação.", color: "#c6532a", icon: "compass", archived: false, stages: [{ id: "e1", name: "Mecânica" }, { id: "e2", name: "Eletrónica" }] },
     ];
     data.events = [
-      { id: "ev1", title: "Reunião de grupo", date: H.shiftDays(today, 2), time: "18:30", place: "Biblioteca", notes: "Fechar o fluxo antes da entrega.", courseId: "c5", projectId: "p1", archived: false },
+      { id: "ev1", title: "Reunião de grupo", date: H.shiftDays(today, 2), time: "18:30", place: "Biblioteca", notes: "Fechar o fluxo antes da entrega.", courseId: "c5", projectId: "p1", kind: "reuniao", archived: false },
     ];
 
     data.grades = [
@@ -243,6 +245,9 @@
         color: H.safeColor(item.color),
         icon: H.safeIcon(item.icon),
         archived: Boolean(item.archived),
+        stages: (Array.isArray(item.stages) ? item.stages : []).map(function (stage) {
+          return { id: (stage && stage.id) || H.uid(), name: ((stage && stage.name) || "").trim() };
+        }).filter(function (stage) { return stage.name; }),
       };
     });
     data.events = (data.events || []).map(function (item) {
@@ -255,6 +260,25 @@
         notes: item.notes || "",
         courseId: item.courseId || "",
         projectId: item.projectId || "",
+        kind: item.kind === "reuniao" ? "reuniao" : "evento",
+        archived: Boolean(item.archived),
+      };
+    });
+    data.items = (data.items || []).map(function (item) {
+      var kind = ["nota", "checklist", "decisao", "link", "notas", "documento"].indexOf(item.kind) >= 0 ? item.kind : "notas";
+      return {
+        id: item.id || H.uid(),
+        projectId: item.projectId || "",
+        kind: kind,
+        title: item.title || "Item",
+        body: item.body || "",
+        url: item.url || "",
+        score: item.score == null || item.score === "" ? null : Number(item.score),
+        items: (Array.isArray(item.items) ? item.items : []).map(function (entry) {
+          return { id: (entry && entry.id) || H.uid(), text: (entry && entry.text) || "", done: Boolean(entry && entry.done) };
+        }).filter(function (entry) { return entry.text; }),
+        fileName: item.fileName || "",
+        fileData: typeof item.fileData === "string" && item.fileData.indexOf("data:") === 0 ? item.fileData : "",
         archived: Boolean(item.archived),
       };
     });
@@ -289,6 +313,7 @@
         title: item.title || "Tarefa",
         courseId: item.courseId || "",
         projectId: item.projectId || "",
+        etapaId: item.etapaId || "",
         type: item.type || "trabalho",
         when: when,
         dueDate: dueDate,
@@ -304,6 +329,12 @@
         archived: Boolean(item.archived),
         archiveGradeId: item.archiveGradeId || "",
       };
+    });
+    data.tasks.forEach(function (task) {
+      if (!task.etapaId) return;
+      var project = data.projects.filter(function (entry) { return entry.id === task.projectId; })[0];
+      var known = project && project.stages.some(function (stage) { return stage.id === task.etapaId; });
+      if (!known) task.etapaId = "";
     });
     data.grades = (data.grades || []).map(function (item) {
       return {
@@ -640,8 +671,14 @@
     saveProject: function (item) { upsert(state.projects, item); save(); },
     deleteProject: function (id) {
       state.projects = state.projects.filter(function (item) { return item.id !== id; });
-      state.tasks.forEach(function (item) { if (item.projectId === id) item.projectId = ""; });
+      state.tasks.forEach(function (item) {
+        if (item.projectId === id) {
+          item.projectId = "";
+          item.etapaId = "";
+        }
+      });
       state.events.forEach(function (item) { if (item.projectId === id) item.projectId = ""; });
+      state.items = state.items.filter(function (item) { return item.projectId !== id; });
       save();
     },
     archiveProject: function (id, archived) {
@@ -651,6 +688,25 @@
       save();
     },
     saveEvent: function (item) { upsert(state.events, item); save(); },
+    saveItem: function (item) { upsert(state.items, item); save(); },
+    deleteItem: function (id) {
+      state.items = state.items.filter(function (item) { return item.id !== id; });
+      save();
+    },
+    archiveItem: function (id, archived) {
+      var item = state.items.filter(function (entry) { return entry.id === id; })[0];
+      if (!item) return;
+      item.archived = archived !== false;
+      save();
+    },
+    toggleCheck: function (itemId, checkId) {
+      var item = state.items.filter(function (entry) { return entry.id === itemId; })[0];
+      if (!item) return;
+      item.items.forEach(function (entry) {
+        if (entry.id === checkId) entry.done = !entry.done;
+      });
+      save();
+    },
     deleteEvent: function (id) {
       state.events = state.events.filter(function (item) { return item.id !== id; });
       save();
@@ -704,7 +760,7 @@
       return item;
     },
     restore: function (kind, id) {
-      var list = kind === "course" ? state.courses : kind === "project" ? state.projects : kind === "event" ? state.events : state.tasks;
+      var list = kind === "course" ? state.courses : kind === "project" ? state.projects : kind === "event" ? state.events : kind === "item" ? state.items : state.tasks;
       var item = list.filter(function (entry) { return entry.id === id; })[0];
       if (!item) return;
       item.archived = false;

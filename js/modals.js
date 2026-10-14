@@ -126,6 +126,7 @@
       title: "",
       courseId: UI.modal.courseId || "",
       projectId: UI.modal.projectId || "",
+      etapaId: UI.modal.etapaId || "",
       type: "trabalho",
       priority: "media",
       dueDate: UI.modal.due || H.todayISO(),
@@ -156,6 +157,7 @@
       field(H.term("cadeira"), '<select name="courseId">' + courseOptions(task.courseId, true) + "</select>") +
       field(H.term("projeto"), '<select name="projectId">' + projectOptions(task.projectId, true) + "</select>") +
       "</div>" +
+      '<div class="field" id="etapa-field"><span>Etapa</span><select name="etapaId">' + etapaOptions(task.projectId, task.etapaId || "") + '</select><small class="hint">As etapas criam-se ao editar o projeto. A tarefa fica só nessa etapa.</small></div>' +
       '<p class="hint">Podes ligar a uma ' + H.esc(H.term("cadeira").toLowerCase()) + ", a um " + H.esc(H.term("projeto").toLowerCase()) + ", ou às duas.</p>" +
       '<div class="field"><span>Tipo</span>' + segment("type", typeChoices, task.type) + "</div>" +
       '<div class="field"><span>Prioridade</span>' + segment("priority", H.PRIORITIES, task.priority) + "</div>" +
@@ -294,6 +296,10 @@
       var eventItem = Store.state.events.filter(function (item) { return item.id === modal.id; })[0];
       title = "Eliminar evento";
       text = eventItem ? "Eliminar «" + eventItem.title + "»?" : "Eliminar este evento?";
+    } else if (modal.entity === "item") {
+      var piece = Store.state.items.filter(function (item) { return item.id === modal.id; })[0];
+      title = "Eliminar item";
+      text = piece ? "Eliminar «" + piece.title + "»?" : "Eliminar este item?";
     } else if (modal.entity === "all") {
       title = "Começar do zero";
       text = "Eliminar cadeiras, tarefas, notas e sessões de estudo? O nome e as datas do semestre mantêm-se.";
@@ -308,13 +314,39 @@
     return shell(title, body, false);
   }
 
+  function etapaRow(stage) {
+    stage = stage || { id: "", name: "" };
+    return (
+      '<div class="etapa-row"><input type="hidden" name="etapaId" value="' + H.esc(stage.id || "") + '"><input name="etapaName" maxlength="60" value="' + H.esc(stage.name || "") + '" placeholder="Ex.: Mecânica"><button type="button" class="icon-btn" data-action="remove-etapa" aria-label="Remover etapa">' + Icons.ui("close") + "</button></div>"
+    );
+  }
+
+  function checkRow(item) {
+    item = item || { text: "" };
+    return (
+      '<div class="date-row"><input name="checkText" maxlength="120" value="' + H.esc(item.text || "") + '" placeholder="Ponto da lista"><button type="button" class="icon-btn" data-action="remove-date" aria-label="Remover ponto">' + Icons.ui("close") + "</button></div>"
+    );
+  }
+
+  function etapaOptions(projectId, selected) {
+    var project = projectId ? Store.project(projectId) : null;
+    var stages = project && project.stages ? project.stages : [];
+    var html = '<option value="">Sem etapa</option>';
+    stages.forEach(function (stage) {
+      html += '<option value="' + H.esc(stage.id) + '"' + (stage.id === selected ? " selected" : "") + ">" + H.esc(stage.name) + "</option>";
+    });
+    return html;
+  }
+
   function projectForm() {
     var existing = UI.modal.id ? Store.project(UI.modal.id) : null;
-    var project = existing || { name: "", description: "", color: H.PALETTE[0].value, icon: "compass", archived: false };
+    var project = existing || { name: "", description: "", color: H.PALETTE[0].value, icon: "compass", archived: false, stages: [] };
+    var stages = project.stages && project.stages.length ? project.stages : [];
     var body = (
       '<form id="form-project">' +
       field("Nome", '<input name="name" required maxlength="80" value="' + H.esc(project.name) + '" placeholder="Ex.: Protótipo">') +
       field("Descrição", '<textarea name="description" maxlength="300" placeholder="O que este projeto inclui…">' + H.esc(project.description || "") + "</textarea>") +
+      '<div class="field"><span>Etapas</span><div id="etapa-list">' + stages.map(etapaRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-etapa">Adicionar etapa</button><small class="hint">Por exemplo Mecânica e Eletrónica. As tarefas de cada etapa ficam só dentro dela.</small></div>' +
       field("Cor", swatches(project.color)) +
       field("Ícone", iconPicks(project.icon)) +
       '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="project" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
@@ -324,7 +356,8 @@
 
   function eventForm() {
     var existing = UI.modal.id ? Store.state.events.filter(function (item) { return item.id === UI.modal.id; })[0] : null;
-    var eventItem = existing || { title: "", date: UI.modal.due || H.todayISO(), time: "", place: "", notes: "", courseId: "", projectId: "" };
+    var eventKind = existing ? (existing.kind === "reuniao" ? "reuniao" : "evento") : (UI.modal.kind === "reuniao" ? "reuniao" : "evento");
+    var eventItem = existing || { title: "", date: UI.modal.due || H.todayISO(), time: "", place: "", notes: "", courseId: "", projectId: UI.modal.projectId || "", kind: eventKind };
     var body = (
       '<form id="form-event">' +
       field("Título", '<input name="title" required maxlength="100" value="' + H.esc(eventItem.title) + '" placeholder="Ex.: Reunião de grupo">') +
@@ -340,7 +373,8 @@
       field("Notas", '<textarea name="notes" maxlength="500">' + H.esc(eventItem.notes || "") + "</textarea>") +
       '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-event" data-id="' + existing.id + '">Arquivar</button><button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="event" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
     );
-    return shell(existing ? "Editar evento" : "Novo evento", body, true);
+    var eventTitle = eventKind === "reuniao" ? (existing ? "Editar reunião" : "Nova reunião") : (existing ? "Editar evento" : "Novo evento");
+    return shell(eventTitle, body, true);
   }
 
   function archiveForm() {
@@ -357,12 +391,51 @@
     return shell("Arquivar tarefa", body, false);
   }
 
+  function itemPicker() {
+    var buttons = H.ITEM_KINDS.map(function (kind) {
+      return '<button type="button" class="kind-btn" data-action="pick-item" data-kind="' + kind.id + '">' + H.esc(kind.label) + "</button>";
+    }).join("");
+    return shell("Adicionar item", '<p class="hint">Escolhe o que queres guardar neste projeto.</p><div class="kind-grid">' + buttons + "</div>", false);
+  }
+
+  function itemForm() {
+    var existing = UI.modal.id ? Store.state.items.filter(function (item) { return item.id === UI.modal.id; })[0] : null;
+    var kind = existing ? existing.kind : UI.modal.kind;
+    var item = existing || { title: "", body: "", url: "", score: "", items: [{ text: "" }], fileName: "" };
+    var label = (H.ITEM_KINDS.filter(function (entry) { return entry.id === kind; })[0] || { label: "Item" }).label;
+    var extra = "";
+    if (kind === "nota") {
+      extra = field("Nota", '<input name="score" inputmode="decimal" value="' + H.esc(item.score == null ? "" : String(item.score).replace(".", ",")) + '" placeholder="0–20">') +
+        field("Comentário", '<textarea name="body" maxlength="1000">' + H.esc(item.body || "") + "</textarea>");
+    } else if (kind === "checklist") {
+      var rows = item.items && item.items.length ? item.items : [{ text: "" }];
+      extra = '<div class="field"><span>Pontos</span><div id="check-list">' + rows.map(checkRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-check">Adicionar ponto</button></div>';
+    } else if (kind === "link") {
+      extra = field("Endereço", '<input name="url" type="url" required maxlength="400" value="' + H.esc(item.url || "") + '" placeholder="https://">') +
+        field("Nota", '<textarea name="body" maxlength="500">' + H.esc(item.body || "") + "</textarea>");
+    } else if (kind === "documento") {
+      extra = field("Ficheiro", '<input name="file" type="file">', item.fileName ? "Atual: " + item.fileName + ". Até 400 KB. Deixa vazio para manter o ficheiro." : "Opcional. Até 400 KB, fica guardado neste computador.") +
+        field("Notas", '<textarea name="body" maxlength="1000">' + H.esc(item.body || "") + "</textarea>");
+    } else {
+      extra = field(kind === "decisao" ? "Decisão" : "Texto", '<textarea name="body" maxlength="2000">' + H.esc(item.body || "") + "</textarea>");
+    }
+    var body = (
+      '<form id="form-item">' +
+      field("Título", '<input name="title" required maxlength="120" value="' + H.esc(item.title || "") + '">') +
+      extra +
+      '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-item" data-id="' + existing.id + '">Arquivar</button><button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="item" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
+    );
+    return shell((existing ? "Editar " : "Nova ") + label.toLowerCase(), body, true);
+  }
+
   function render() {
     var modal = UI.modal;
     if (!modal) return "";
     if (modal.type === "course") return courseForm();
     if (modal.type === "task") return taskForm();
     if (modal.type === "project") return projectForm();
+    if (modal.type === "item-picker") return itemPicker();
+    if (modal.type === "item") return itemForm();
     if (modal.type === "event") return eventForm();
     if (modal.type === "archive") return archiveForm();
     if (modal.type === "grade") return gradeForm();
@@ -373,5 +446,5 @@
     return "";
   }
 
-  window.Modals = { render: render, scheduleRow: scheduleRow, staffRow: staffRow, roomRow: roomRow, dateRow: dateRow };
+  window.Modals = { render: render, scheduleRow: scheduleRow, staffRow: staffRow, roomRow: roomRow, dateRow: dateRow, etapaRow: etapaRow, checkRow: checkRow, etapaOptions: etapaOptions };
 })();

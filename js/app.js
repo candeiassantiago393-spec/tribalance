@@ -27,7 +27,22 @@
       archive: H.term("arquivo"),
       customize: "Personalizar",
     };
+    if (view === "project") {
+      var current = Store.project(UI.projectId);
+      return current ? current.name : H.term("projeto");
+    }
     return titles[view] || "Painel";
+  }
+
+  function applyHash() {
+    var raw = decodeURIComponent(location.hash.replace(/^#/, ""));
+    if (raw.indexOf("projeto/") === 0) {
+      UI.view = "project";
+      UI.projectId = raw.slice("projeto/".length);
+      return true;
+    }
+    UI.view = FROM_HASH[raw] || "dashboard";
+    return Boolean(FROM_HASH[raw]);
   }
 
   window.UI = {
@@ -37,6 +52,8 @@
     focusModal: false,
     taskFilter: { status: "pendentes", courseId: "all", projectId: "all", priority: "all", type: "all", q: "" },
     taskLayout: "list",
+    projectId: "",
+    projectFilter: "tudo",
     calMode: "month",
     calDate: new Date(),
   };
@@ -62,7 +79,7 @@
     document.body.classList.toggle("modal-open", Boolean(UI.modal));
 
     document.querySelectorAll(".nav-item").forEach(function (button) {
-      var on = button.dataset.view === view;
+      var on = button.dataset.view === (view === "project" ? "projects" : view);
       button.classList.toggle("is-active", on);
       if (on) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -264,6 +281,12 @@
       dates: dates,
       dueTime: val(form, "dueTime"),
       notes: val(form, "notes").trim(),
+      etapaId: (function () {
+        var etapaId = val(form, "etapaId");
+        var owner = Store.project(projectId);
+        if (!owner || !(owner.stages || []).some(function (stage) { return stage.id === etapaId; })) return "";
+        return etapaId;
+      })(),
       stage: done ? "feita" : (existing && existing.stage === "curso" ? "curso" : "fazer"),
       done: done,
       doneAt: done ? ((existing && existing.doneAt) || H.todayISO()) : null,
@@ -283,14 +306,29 @@
     var existing = UI.modal && UI.modal.id ? Store.project(UI.modal.id) : null;
     var colorBtn = form.querySelector(".swatch.is-selected");
     var iconBtn = form.querySelector(".icon-opt.is-selected");
+    var idInputs = form.querySelectorAll('[name="etapaId"]');
+    var nameInputs = form.querySelectorAll('[name="etapaName"]');
+    var stages = [];
+    for (var i = 0; i < nameInputs.length; i++) {
+      var stageName = nameInputs[i].value.trim();
+      if (!stageName) continue;
+      stages.push({ id: (idInputs[i] && idInputs[i].value) || H.uid(), name: stageName });
+    }
+    var projectId = existing ? existing.id : H.uid();
     Store.saveProject({
-      id: existing ? existing.id : H.uid(),
+      id: projectId,
       name: name,
       description: val(form, "description").trim(),
       color: colorBtn ? colorBtn.dataset.color : H.PALETTE[0].value,
       icon: iconBtn ? iconBtn.dataset.icon : "compass",
       archived: existing ? Boolean(existing.archived) : false,
+      stages: stages,
     });
+    Store.state.tasks.forEach(function (task) {
+      if (task.projectId !== projectId || !task.etapaId) return;
+      if (!stages.some(function (stage) { return stage.id === task.etapaId; })) task.etapaId = "";
+    });
+    Store.updateSettings({});
     UI.modal = null;
     UI.returnModal = null;
     toast("Projeto guardado.");
@@ -305,6 +343,7 @@
     var existing = UI.modal && UI.modal.id
       ? Store.state.events.filter(function (item) { return item.id === UI.modal.id; })[0]
       : null;
+    var kind = existing ? (existing.kind === "reuniao" ? "reuniao" : "evento") : (UI.modal && UI.modal.kind === "reuniao" ? "reuniao" : "evento");
     Store.saveEvent({
       id: existing ? existing.id : H.uid(),
       title: title,
@@ -314,12 +353,74 @@
       notes: val(form, "notes").trim(),
       courseId: val(form, "courseId"),
       projectId: val(form, "projectId"),
+      kind: kind,
       archived: existing ? Boolean(existing.archived) : false,
     });
     UI.modal = null;
     UI.returnModal = null;
-    toast("Evento guardado.");
+    toast(kind === "reuniao" ? "Reunião guardada." : "Evento guardado.");
     render();
+  }
+
+  function saveItem(form) {
+    var title = val(form, "title").trim();
+    if (!title) return toast("Indica o título.");
+    var existing = UI.modal && UI.modal.id
+      ? Store.state.items.filter(function (item) { return item.id === UI.modal.id; })[0]
+      : null;
+    var kind = existing ? existing.kind : (UI.modal.kind || "notas");
+    var score = null;
+    if (kind === "nota" && val(form, "score").trim()) {
+      score = H.readNumber(val(form, "score"));
+      if (Number.isNaN(score) || score < 0 || score > 20) return toast("A nota tem de estar entre 0 e 20.");
+    }
+    var checks = [];
+    if (kind === "checklist") {
+      form.querySelectorAll('[name="checkText"]').forEach(function (input) {
+        var text = input.value.trim();
+        if (text) checks.push({ id: H.uid(), text: text, done: false });
+      });
+      if (existing) {
+        checks = checks.map(function (entry, index) {
+          var previous = existing.items[index];
+          return { id: previous ? previous.id : entry.id, text: entry.text, done: previous ? previous.done : false };
+        });
+      }
+      if (!checks.length) return toast("Adiciona pelo menos um ponto.");
+    }
+    if (kind === "link") {
+      var url = val(form, "url").trim();
+      if (!url) return toast("Indica o endereço.");
+    }
+    var file = form.elements.file && form.elements.file.files ? form.elements.file.files[0] : null;
+    if (file && file.size > 400000) return toast("O documento pode ter no máximo 400 KB.");
+    function finish(fileName, fileData) {
+      Store.saveItem({
+        id: existing ? existing.id : H.uid(),
+        projectId: (existing && existing.projectId) || UI.modal.projectId || UI.projectId,
+        kind: kind,
+        title: title,
+        body: val(form, "body").trim(),
+        url: kind === "link" ? val(form, "url").trim() : "",
+        score: score,
+        items: checks,
+        fileName: fileName || "",
+        fileData: fileData || "",
+        archived: existing ? Boolean(existing.archived) : false,
+      });
+      UI.modal = null;
+      UI.returnModal = null;
+      toast("Item guardado.");
+      render();
+    }
+    if (file) {
+      var reader = new FileReader();
+      reader.onload = function () { finish(file.name, String(reader.result || "")); };
+      reader.onerror = function () { toast("Não foi possível ler o documento."); };
+      reader.readAsDataURL(file);
+      return;
+    }
+    finish(existing ? existing.fileName : "", existing ? existing.fileData : "");
   }
 
   function saveArchive(form) {
@@ -423,8 +524,18 @@
       Store.deleteSession(modal.id);
       toast("Sessão eliminada.");
     } else if (modal.entity === "project") {
-      Store.deleteProject(modal.id);
+      var removedProject = modal.id;
+      Store.deleteProject(removedProject);
       toast("Projeto eliminado.");
+      UI.modal = null;
+      UI.returnModal = null;
+      if (UI.view === "project" && UI.projectId === removedProject) {
+        setView("projects");
+        return;
+      }
+    } else if (modal.entity === "item") {
+      Store.deleteItem(modal.id);
+      toast("Item eliminado.");
     } else if (modal.entity === "event") {
       Store.deleteEvent(modal.id);
       toast("Evento eliminado.");
@@ -530,7 +641,67 @@
       return;
     }
     if (action === "open-task") {
-      openModal({ type: "task", id: el.dataset.id || "", due: el.dataset.due || "", courseId: el.dataset.course || "", projectId: el.dataset.project || "" });
+      openModal({ type: "task", id: el.dataset.id || "", due: el.dataset.due || "", courseId: el.dataset.course || "", projectId: el.dataset.project || "", etapaId: el.dataset.etapa || "" });
+      return;
+    }
+    if (action === "open-project-view") {
+      var projectHash = "#projeto/" + encodeURIComponent(el.dataset.id || "");
+      if (location.hash !== projectHash) location.hash = projectHash;
+      else applyHash();
+      render();
+      return;
+    }
+    if (action === "open-item-picker") {
+      openModal({ type: "item-picker", projectId: el.dataset.project || UI.projectId });
+      return;
+    }
+    if (action === "pick-item") {
+      var picked = el.dataset.kind;
+      var projectForItem = UI.modal && UI.modal.projectId ? UI.modal.projectId : UI.projectId;
+      if (picked === "tarefa") {
+        openModal({ type: "task", projectId: projectForItem });
+        return;
+      }
+      if (picked === "evento" || picked === "reuniao") {
+        openModal({ type: "event", projectId: projectForItem, kind: picked });
+        return;
+      }
+      openModal({ type: "item", projectId: projectForItem, kind: picked });
+      return;
+    }
+    if (action === "open-item") {
+      openModal({ type: "item", id: el.dataset.id || "" });
+      return;
+    }
+    if (action === "project-filter") {
+      UI.projectFilter = el.dataset.filter || "tudo";
+      render();
+      return;
+    }
+    if (action === "toggle-check") {
+      Store.toggleCheck(el.dataset.item, el.dataset.check);
+      render();
+      return;
+    }
+    if (action === "archive-item") {
+      Store.archiveItem(el.dataset.id, true);
+      toast("Item arquivado.");
+      closeModal();
+      return;
+    }
+    if (action === "add-etapa") {
+      var etapaList = document.getElementById("etapa-list");
+      if (etapaList) etapaList.insertAdjacentHTML("beforeend", Modals.etapaRow({ id: "", name: "" }));
+      return;
+    }
+    if (action === "remove-etapa") {
+      var etapaRow = el.closest(".etapa-row");
+      if (etapaRow) etapaRow.remove();
+      return;
+    }
+    if (action === "add-check") {
+      var checkList = document.getElementById("check-list");
+      if (checkList) checkList.insertAdjacentHTML("beforeend", Modals.checkRow({ text: "" }));
       return;
     }
     if (action === "open-project") {
@@ -554,7 +725,8 @@
     if (action === "archive-project") {
       Store.archiveProject(el.dataset.id, true);
       toast("Projeto arquivado.");
-      render();
+      if (UI.view === "project" && UI.projectId === el.dataset.id) setView("projects");
+      else render();
       return;
     }
     if (action === "archive-event") {
@@ -717,13 +889,14 @@
   document.addEventListener("submit", function (event) {
     var form = event.target;
     if (!form || !form.id) return;
-    if (form.id === "form-course" || form.id === "form-task" || form.id === "form-grade" || form.id === "form-session" || form.id === "form-settings" || form.id === "form-project" || form.id === "form-event" || form.id === "form-archive" || form.id === "form-labels") {
+    if (form.id === "form-course" || form.id === "form-task" || form.id === "form-grade" || form.id === "form-session" || form.id === "form-settings" || form.id === "form-project" || form.id === "form-event" || form.id === "form-archive" || form.id === "form-labels" || form.id === "form-item") {
       event.preventDefault();
     }
     if (form.id === "form-course") saveCourse(form);
     if (form.id === "form-task") saveTask(form);
     if (form.id === "form-project") saveProject(form);
     if (form.id === "form-event") saveEvent(form);
+    if (form.id === "form-item") saveItem(form);
     if (form.id === "form-archive") saveArchive(form);
     if (form.id === "form-labels") saveLabels(form);
     if (form.id === "form-grade") saveGrade(form);
@@ -733,6 +906,13 @@
 
   document.addEventListener("change", function (event) {
     var target = event.target;
+    if (target.name === "projectId" && target.form && target.form.id === "form-task") {
+      var etapaSelect = target.form.querySelector('[name="etapaId"]');
+      if (etapaSelect) {
+        var currentEtapa = etapaSelect.value;
+        etapaSelect.innerHTML = Modals.etapaOptions(target.value, currentEtapa);
+      }
+    }
     if (target.matches("[data-stage-for]")) {
       var moved = Store.setTaskStage(target.dataset.stageFor, target.value);
       if (moved) toast(moved.stage === "feita" ? "Tarefa concluída." : moved.stage === "curso" ? "Tarefa em curso." : "Tarefa por fazer.");
@@ -814,13 +994,18 @@
   });
 
   window.addEventListener("hashchange", function () {
-    UI.view = FROM_HASH[location.hash.slice(1)] || "dashboard";
+    if (!applyHash() && location.hash.replace(/^#/, "").indexOf("projeto/") !== 0) {
+      history.replaceState(null, "", "#painel");
+      UI.view = "dashboard";
+    }
     document.body.classList.remove("nav-open");
     render();
   });
 
-  if (!FROM_HASH[location.hash.slice(1)]) history.replaceState(null, "", "#painel");
-  UI.view = FROM_HASH[location.hash.slice(1)] || "dashboard";
+  if (!applyHash()) {
+    history.replaceState(null, "", "#painel");
+    UI.view = "dashboard";
+  }
   render();
   scanNotifications();
 })();

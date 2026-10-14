@@ -567,10 +567,10 @@
         '<button type="button" class="icon-btn" data-action="open-project" data-id="' + project.id + '" aria-label="Editar projeto">' + Icons.ui("edit") + "</button>" +
         '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="project" data-id="' + project.id + '" aria-label="Eliminar projeto">' + Icons.ui("trash") + "</button>" +
         "</div></div>" +
-        "<h3>" + H.esc(project.name) + "</h3>" +
+        '<h3><button type="button" class="plain-title" data-action="open-project-view" data-id="' + project.id + '">' + H.esc(project.name) + "</button></h3>" +
         (project.description ? "<p>" + H.esc(project.description) + "</p>" : '<p class="muted">Sem descrição.</p>') +
-        '<footer class="course-meta"><span>' + H.esc(H.countLabel(tasks.length, "tarefa", "tarefas")) + "</span><span>" + H.esc(H.countLabel(pending, "pendente", "pendentes")) + "</span></footer>" +
-        '<div class="page-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="open-task" data-project="' + project.id + '">Nova tarefa</button>' +
+        '<footer class="course-meta"><span>' + H.esc(H.countLabel(tasks.length, "tarefa", "tarefas")) + "</span><span>" + H.esc(H.countLabel(pending, "pendente", "pendentes")) + "</span><span>" + H.esc(H.countLabel((project.stages || []).length, "etapa", "etapas")) + "</span></footer>" +
+        '<div class="page-actions"><button type="button" class="btn btn-primary btn-sm" data-action="open-project-view" data-id="' + project.id + '">Abrir</button>' +
         '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-project" data-id="' + project.id + '">Arquivar</button></div>' +
         "</div></article>"
       );
@@ -580,6 +580,95 @@
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-project">' + Icons.ui("plus") + "Novo " + H.esc(H.term("projeto").toLowerCase()) + "</button></div></header>" +
       (list.length ? '<div class="cards">' + cards + "</div>" : empty("Ainda não há projetos", "Cria um projeto e liga-lhe tarefas, com ou sem cadeira.", "open-project", "Novo projeto")) +
       "</section>"
+    );
+  }
+
+  function projectDetail() {
+    var project = Store.project(UI.projectId);
+    if (!project) {
+      return '<section class="page"><header class="page-head"><div><button type="button" class="back-link" data-action="nav" data-view="projects">Projetos</button><h1>Projeto em falta</h1><p class="lede">Este projeto já não existe.</p></div></header></section>';
+    }
+    var filter = UI.projectFilter || "tudo";
+    var filters = [{ id: "tudo", label: "Tudo" }].concat(H.ITEM_KINDS);
+    var chips = filters.map(function (entry) {
+      return '<button type="button" class="chip-btn' + (filter === entry.id ? " is-selected" : "") + '" data-action="project-filter" data-filter="' + entry.id + '">' + H.esc(entry.label) + "</button>";
+    }).join("");
+    var tasks = Store.state.tasks.filter(function (task) { return task.projectId === project.id && !task.archived; });
+    var events = Store.state.events.filter(function (event) { return event.projectId === project.id && !event.archived; });
+    var items = Store.state.items.filter(function (item) { return item.projectId === project.id && !item.archived; });
+    var showTasks = filter === "tudo" || filter === "tarefa";
+    var stages = project.stages || [];
+
+    function taskBlock(task) {
+      return taskRow(task);
+    }
+    function etapaBlock(stage) {
+      var list = tasks.filter(function (task) { return task.etapaId === stage.id; });
+      return (
+        '<section class="etapa"><header class="etapa-head"><h2>' + H.esc(stage.name) + "</h2>" +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="open-task" data-project="' + project.id + '" data-etapa="' + stage.id + '">Nova tarefa</button></header>' +
+        (list.length ? '<div class="task-list">' + list.map(taskBlock).join("") + "</div>" : '<p class="muted">Ainda não há tarefas nesta etapa.</p>') +
+        "</section>"
+      );
+    }
+    var loose = tasks.filter(function (task) {
+      return !stages.some(function (stage) { return stage.id === task.etapaId; });
+    });
+    var taskHtml = "";
+    if (showTasks) {
+      taskHtml = (stages.length ? stages.map(etapaBlock).join("") : "") +
+        '<section class="etapa"><header class="etapa-head"><h2>' + (stages.length ? "Sem etapa" : "Tarefas") + "</h2>" +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="open-task" data-project="' + project.id + '">Nova tarefa</button></header>' +
+        (loose.length ? '<div class="task-list">' + loose.map(taskBlock).join("") + "</div>" : '<p class="muted">As tarefas sem etapa ficam aqui. Cria etapas no editar, por exemplo Mecânica e Eletrónica.</p>') +
+        "</section>";
+    }
+
+    function kindLabel(id) {
+      var found = H.ITEM_KINDS.filter(function (entry) { return entry.id === id; })[0];
+      return found ? found.label : "Item";
+    }
+    function itemCard(item) {
+      var detail = "";
+      if (item.kind === "nota" && item.score != null && !Number.isNaN(item.score)) detail = "<p>Nota " + H.esc(H.formatGrade(item.score)) + "</p>";
+      if (item.kind === "checklist") {
+        detail = '<ul class="check-items">' + item.items.map(function (entry) {
+          return '<li><button type="button" class="check' + (entry.done ? " is-on" : "") + '" data-action="toggle-check" data-item="' + item.id + '" data-check="' + entry.id + '" aria-label="Marcar ponto">' + Icons.ui("check") + '</button><span' + (entry.done ? ' class="is-done"' : "") + ">" + H.esc(entry.text) + "</span></li>";
+        }).join("") + "</ul>";
+      }
+      if (item.kind === "link") detail = '<p><a href="' + H.esc(item.url) + '" target="_blank" rel="noopener">' + H.esc(item.url) + "</a></p>";
+      if (item.body && item.kind !== "link") detail += "<p>" + H.esc(item.body) + "</p>";
+      if (item.kind === "documento" && item.fileData) detail += '<p><a href="' + H.esc(item.fileData) + '" download="' + H.esc(item.fileName || "documento") + '">' + H.esc(item.fileName || "Descarregar") + "</a></p>";
+      return (
+        '<article class="item-card"><div class="task-main"><span class="badge">' + H.esc(kindLabel(item.kind)) + "</span><h3 class=\"task-title\">" + H.esc(item.title) + "</h3>" + detail + "</div>" +
+        '<div class="task-actions"><button type="button" class="icon-btn" data-action="open-item" data-id="' + item.id + '" aria-label="Editar item">' + Icons.ui("edit") + "</button>" +
+        '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="item" data-id="' + item.id + '" aria-label="Eliminar item">' + Icons.ui("trash") + "</button></div></article>"
+      );
+    }
+    function eventCard(event) {
+      return (
+        '<article class="item-card"><div class="task-main"><span class="badge">' + H.esc(event.kind === "reuniao" ? "Reunião" : "Evento") + "</span><h3 class=\"task-title\">" + H.esc(event.title) + "</h3>" +
+        "<p class=\"task-meta\">" + H.esc(H.formatShort(event.date) + (event.time ? " " + event.time : "") + (event.place ? " · " + event.place : "")) + "</p></div>" +
+        '<div class="task-actions"><button type="button" class="icon-btn" data-action="open-event" data-id="' + event.id + '" aria-label="Editar">' + Icons.ui("edit") + "</button>" +
+        '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="event" data-id="' + event.id + '" aria-label="Eliminar">' + Icons.ui("trash") + "</button></div></article>"
+      );
+    }
+    var extra = [];
+    if (filter === "tudo" || filter === "evento") extra = extra.concat(events.filter(function (event) { return event.kind !== "reuniao"; }).map(eventCard));
+    if (filter === "tudo" || filter === "reuniao") extra = extra.concat(events.filter(function (event) { return event.kind === "reuniao"; }).map(eventCard));
+    items.forEach(function (item) {
+      if (filter === "tudo" || filter === item.kind) extra.push(itemCard(item));
+    });
+    var extraHtml = extra.length ? '<div class="stack">' + extra.join("") + "</div>" : (showTasks ? "" : '<p class="muted">Nada deste tipo neste projeto.</p>');
+
+    return (
+      '<section class="page"><header class="page-head"><div><button type="button" class="back-link" data-action="nav" data-view="projects">Projetos</button><p class="eyebrow">Visão geral</p><h1>' + H.esc(project.name) + "</h1>" +
+      (project.description ? '<p class="lede">' + H.esc(project.description) + "</p>" : "") + "</div>" +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-item-picker" data-project="' + project.id + '">' + Icons.ui("plus") + 'Adicionar item</button>' +
+      '<button type="button" class="btn btn-ghost" data-action="open-project" data-id="' + project.id + '">Editar</button>' +
+      '<button type="button" class="btn btn-ghost" data-action="archive-project" data-id="' + project.id + '">Arquivar</button>' +
+      '<button type="button" class="btn btn-danger" data-action="ask-delete" data-entity="project" data-id="' + project.id + '">Eliminar</button></div></header>' +
+      '<div class="chip-row">' + chips + "</div>" +
+      taskHtml + extraHtml + "</section>"
     );
   }
 
@@ -637,6 +726,7 @@
     dashboard: dashboard,
     courses: courses,
     projects: projects,
+    project: projectDetail,
     tasks: tasks,
     calendar: calendar,
     grades: grades,

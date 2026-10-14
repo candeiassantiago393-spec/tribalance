@@ -56,6 +56,18 @@
     { id: "AMBAS", short: "Ambas", label: "Teórica e laboratorial" },
   ];
 
+  var ITEM_KINDS = [
+    { id: "tarefa", label: "Tarefa" },
+    { id: "nota", label: "Nota" },
+    { id: "checklist", label: "Checklist" },
+    { id: "decisao", label: "Decisão" },
+    { id: "link", label: "Link" },
+    { id: "evento", label: "Evento" },
+    { id: "reuniao", label: "Reunião" },
+    { id: "notas", label: "Notas" },
+    { id: "documento", label: "Documento" },
+  ];
+
   var REMINDER_OPTIONS = [
     { days: 0, label: "No próprio dia" },
     { days: 1, label: "1 dia antes" },
@@ -345,6 +357,7 @@
     PALETTE: PALETTE,
     COURSE_ICONS: COURSE_ICONS,
     TYPES: TYPES,
+    ITEM_KINDS: ITEM_KINDS,
     TERMS: TERMS,
     term: term,
     CLASS_TYPES: CLASS_TYPES,
