@@ -81,7 +81,19 @@
       task("t15", "Ficha de SQL", "c3", "trabalho", -1, "23:59", "media", true, [0, 1], ""),
     ].map(function (item) {
       item.dueDate = H.shiftDays(today, item._offset);
+      item.when = "unico";
+      item.startDate = item.dueDate;
+      item.dates = [];
       if (item.done) item.doneAt = item.dueDate;
+      if (item.id === "t3") {
+        item.when = "periodo";
+        item.startDate = today;
+      }
+      if (item.id === "t8") {
+        item.when = "especificos";
+        item.dates = [H.shiftDays(today, 6), H.shiftDays(today, 10), item.dueDate];
+        item.startDate = item.dates[0];
+      }
       delete item._offset;
       return item;
     });
@@ -161,6 +173,9 @@
   }
 
   function normalize(data) {
+    function isoDay(value) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : "";
+    }
     var base = blank();
     data = data || {};
     data.courses = (data.courses || []).map(function (item) {
@@ -207,16 +222,40 @@
       };
     });
     data.tasks = (data.tasks || []).map(function (item) {
+      var dueDate = isoDay(item.dueDate) || H.todayISO();
+      var when = item.when === "periodo" || item.when === "especificos" ? item.when : "unico";
+      var startDate = isoDay(item.startDate) || dueDate;
+      var dates = (Array.isArray(item.dates) ? item.dates : []).map(isoDay).filter(Boolean);
+      dates = dates.filter(function (day, index) { return dates.indexOf(day) === index; }).sort();
+      if (when === "especificos") {
+        if (!dates.length) dates = [dueDate];
+        startDate = dates[0];
+        dueDate = dates[dates.length - 1];
+      } else if (when === "periodo") {
+        if (startDate > dueDate) {
+          var swap = startDate;
+          startDate = dueDate;
+          dueDate = swap;
+        }
+        dates = [];
+      } else {
+        when = "unico";
+        startDate = dueDate;
+        dates = [];
+      }
       return {
         id: item.id || H.uid(),
         title: item.title || "Tarefa",
         courseId: item.courseId || "",
         type: item.type || "trabalho",
-        dueDate: item.dueDate || H.todayISO(),
+        when: when,
+        dueDate: dueDate,
+        startDate: startDate,
+        dates: dates,
         dueTime: item.dueTime || "",
         priority: item.priority || "media",
         done: Boolean(item.done),
-        doneAt: item.done ? (item.doneAt || item.dueDate || H.todayISO()) : null,
+        doneAt: item.done ? (item.doneAt || item.dueDate || dueDate) : null,
         reminders: Array.isArray(item.reminders) ? item.reminders.map(Number) : [1, 7],
         notes: item.notes || "",
       };
@@ -358,7 +397,7 @@
   }
 
   function tasksDueOn(iso) {
-    return sortTasks(state.tasks.filter(function (item) { return item.dueDate === iso; }));
+    return sortTasks(state.tasks.filter(function (item) { return H.taskOccursOn(item, iso); }));
   }
 
   function classesOn(date) {
@@ -390,9 +429,7 @@
 
   function activeReminders() {
     return sortTasks(state.tasks.filter(function (item) {
-      if (item.done || H.isOverdue(item)) return false;
-      var days = H.daysUntil(item);
-      return (item.reminders || []).indexOf(days) >= 0;
+      return H.reminderHits(item) && !H.isOverdue(item);
     }));
   }
 

@@ -500,7 +500,9 @@ button.kpi:hover { border-color: #d8cec0; }
 .field input, .field select, .field textarea, .schedule-row select, .schedule-row input { width: 100%; padding: 10px 12px; }
 .field textarea { min-height: 84px; resize: vertical; }
 .hint { color: var(--muted); font-size: 12px; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.when-panel { display: none; }
+.when-panel.is-on { display: block; }
+.date-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
 .swatches, .icon-picks, .presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; background: var(--c); box-shadow: 0 0 0 1px #e4dcd0; padding: 0; }
 .swatch.is-selected { box-shadow: 0 0 0 2px var(--ink); }

@@ -198,13 +198,42 @@
     var reminders = Array.prototype.map.call(form.querySelectorAll('input[name="reminder"]:checked'), function (input) {
       return Number(input.value);
     });
+    var when = readSegment(form, "when") || "unico";
+    var dueDate = "";
+    var startDate = "";
+    var dates = [];
+    if (when === "periodo") {
+      startDate = val(form, "startDate");
+      dueDate = val(form, "endDate");
+      if (!startDate || !dueDate) return toast("Indica o primeiro e o último dia do período.");
+      if (startDate > dueDate) return toast("O período tem de acabar no próprio dia ou depois.");
+      if (H.daysBetween(startDate, dueDate) > 180) return toast("O período pode ter no máximo 180 dias.");
+    } else if (when === "especificos") {
+      var dateInputs = form.querySelectorAll('[name="extraDate"]');
+      for (var d = 0; d < dateInputs.length; d++) {
+        var day = dateInputs[d].value;
+        if (day && dates.indexOf(day) < 0) dates.push(day);
+      }
+      dates.sort();
+      if (!dates.length) return toast("Escolhe pelo menos um dia.");
+      startDate = dates[0];
+      dueDate = dates[dates.length - 1];
+    } else {
+      when = "unico";
+      dueDate = val(form, "dueDate");
+      if (!dueDate) return toast("Indica o dia da tarefa.");
+      startDate = dueDate;
+    }
     Store.saveTask({
       id: existing ? existing.id : H.uid(),
       title: title,
       courseId: val(form, "courseId"),
       type: readSegment(form, "type") || "trabalho",
       priority: readSegment(form, "priority") || "media",
-      dueDate: val(form, "dueDate"),
+      when: when,
+      dueDate: dueDate,
+      startDate: startDate,
+      dates: dates,
       dueTime: val(form, "dueTime"),
       notes: val(form, "notes").trim(),
       done: done,
@@ -462,6 +491,11 @@
       if (!group) return;
       group.querySelectorAll("button").forEach(function (button) { button.classList.remove("is-selected"); });
       el.classList.add("is-selected");
+      if (group.dataset.segment === "when") {
+        document.querySelectorAll(".when-panel").forEach(function (panel) {
+          panel.classList.toggle("is-on", panel.dataset.when === el.dataset.value);
+        });
+      }
       return;
     }
     if (action === "pick-color" || action === "pick-icon") {
@@ -498,6 +532,16 @@
     if (action === "remove-room") {
       var roomRow = el.closest(".room-row");
       if (roomRow) roomRow.remove();
+      return;
+    }
+    if (action === "add-date") {
+      var dateList = document.getElementById("date-list");
+      if (dateList) dateList.insertAdjacentHTML("beforeend", Modals.dateRow(""));
+      return;
+    }
+    if (action === "remove-date") {
+      var dateRow = el.closest(".date-row");
+      if (dateRow) dateRow.remove();
       return;
     }
     if (action === "set-minutes") {
@@ -553,6 +597,8 @@
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
+    var typing = event.target.closest("input, textarea, select, [contenteditable='true']");
+    if (typing) return;
     var el = event.target.closest("[data-action]");
     if (!el || el.tagName === "BUTTON" || el.tagName === "A" || el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") return;
     event.preventDefault();

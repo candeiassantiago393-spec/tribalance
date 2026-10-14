@@ -217,7 +217,7 @@
     }).join("");
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Trabalho</p><h1>Tarefas</h1><p class="lede">Trabalhos, testes, frequências e entregas, com prazo e prioridade.</p></div>' +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Trabalho</p><h1>Tarefas</h1><p class="lede">Trabalhos, testes, frequências e entregas, num dia, num período ou em dias específicos.</p></div>' +
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova tarefa</button></div></header>" +
       '<div class="filters">' +
       '<label class="search">' + Icons.ui("search") + '<input id="task-search" type="search" placeholder="Procurar tarefa" value="' + H.esc(filter.q || "") + '"></label>' +
@@ -446,7 +446,7 @@
       return (
         '<article class="remind' + (overdueTask ? " is-overdue" : "") + '">' +
         '<div class="remind-main"><div class="task-line"><h3>' + H.esc(task.title) + "</h3><span class=\"badge badge-" + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span></div>" +
-        "<p class=\"task-meta\">" + courseDot(course) + "<span>" + H.esc(course ? course.name : "Sem cadeira") + "</span><span>·</span><span>" + H.esc(reason) + "</span><span>·</span><span>" + H.esc(H.formatShort(task.dueDate) + (task.dueTime ? " " + task.dueTime : "")) + "</span></p></div>" +
+        "<p class=\"task-meta\">" + courseDot(course) + "<span>" + H.esc(course ? course.name : "Sem cadeira") + "</span><span>·</span><span>" + H.esc(reason) + "</span><span>·</span><span>" + H.esc(H.whenText(task) + (task.dueTime ? " " + task.dueTime : "")) + "</span></p></div>" +
         '<div class="task-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="toggle-task" data-id="' + task.id + '">Concluir</button><button type="button" class="icon-btn" data-action="open-task" data-id="' + task.id + '" aria-label="Editar tarefa">' + Icons.ui("edit") + "</button></div></article>"
       );
     }

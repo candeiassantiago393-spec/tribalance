@@ -101,6 +101,12 @@
     return shell(existing ? "Editar cadeira" : "Nova cadeira", body, true);
   }
 
+  function dateRow(iso) {
+    return (
+      '<div class="date-row"><input type="date" name="extraDate" value="' + H.esc(iso || "") + '"><button type="button" class="icon-btn" data-action="remove-date" aria-label="Remover dia">' + Icons.ui("close") + "</button></div>"
+    );
+  }
+
   function taskForm() {
     if (!Store.state.courses.length) {
       return shell("Nova tarefa", '<p>Cria primeiro uma cadeira para poderes associar a tarefa.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Fechar</button><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
@@ -112,6 +118,9 @@
       type: "trabalho",
       priority: "media",
       dueDate: UI.modal.due || H.todayISO(),
+      startDate: UI.modal.due || H.todayISO(),
+      dates: UI.modal.due ? [UI.modal.due] : [H.todayISO()],
+      when: "unico",
       dueTime: "",
       notes: "",
       done: false,
@@ -121,16 +130,29 @@
       var on = (task.reminders || []).indexOf(option.days) >= 0;
       return '<label class="checkline"><input type="checkbox" name="reminder" value="' + option.days + '"' + (on ? " checked" : "") + "><span>" + H.esc(option.label) + "</span></label>";
     }).join("");
+    var when = task.when === "periodo" || task.when === "especificos" ? task.when : "unico";
+    var dates = task.dates && task.dates.length ? task.dates : [task.dueDate];
+    var whenOptions = [
+      { id: "unico", label: "Dia único" },
+      { id: "periodo", label: "Período" },
+      { id: "especificos", label: "Dias específicos" },
+    ];
     var body = (
       '<form id="form-task">' +
       field("Título", '<input name="title" required maxlength="100" value="' + H.esc(task.title) + '" placeholder="Ex.: Frequência de Matemática">') +
       field("Cadeira", '<select name="courseId">' + courseOptions(task.courseId) + "</select>") +
       '<div class="field"><span>Tipo</span>' + segment("type", H.TYPES, task.type) + "</div>" +
       '<div class="field"><span>Prioridade</span>' + segment("priority", H.PRIORITIES, task.priority) + "</div>" +
-      '<div class="form-grid">' +
-      field("Prazo", '<input type="date" name="dueDate" required value="' + H.esc(task.dueDate) + '">') +
-      field("Hora", '<input type="time" name="dueTime" value="' + H.esc(task.dueTime || "") + '">', "Opcional. Sem hora, o prazo acaba no fim do dia.") +
+      '<div class="field"><span>Quando</span>' + segment("when", whenOptions, when) + '<small class="hint">Dia único, um período de um dia a outro, ou vários dias à escolha.</small></div>' +
+      '<div class="when-panel' + (when === "unico" ? " is-on" : "") + '" data-when="unico">' +
+      field("Dia", '<input type="date" name="dueDate" value="' + H.esc(task.dueDate) + '">') +
       "</div>" +
+      '<div class="when-panel' + (when === "periodo" ? " is-on" : "") + '" data-when="periodo"><div class="form-grid">' +
+      field("De", '<input type="date" name="startDate" value="' + H.esc(task.startDate || task.dueDate) + '">') +
+      field("Até", '<input type="date" name="endDate" value="' + H.esc(task.dueDate) + '">') +
+      "</div></div>" +
+      '<div class="when-panel' + (when === "especificos" ? " is-on" : "") + '" data-when="especificos"><div class="field"><span>Dias</span><div id="date-list">' + dates.map(dateRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-date">Adicionar dia</button></div></div>' +
+      field("Hora", '<input type="time" name="dueTime" value="' + H.esc(task.dueTime || "") + '">', "Opcional. Sem hora, o prazo acaba no fim do dia.") +
       '<div class="field"><span>Alertas</span><div class="check-grid">' + checks + "</div></div>" +
       field("Notas", '<textarea name="notes" maxlength="500" placeholder="Detalhes, capítulos, colegas de grupo…">' + H.esc(task.notes || "") + "</textarea>") +
       '<label class="checkline"><input type="checkbox" name="done"' + (task.done ? " checked" : "") + "><span>Marcar como concluída</span></label>" +
@@ -268,5 +290,5 @@
     return "";
   }
 
-  window.Modals = { render: render, scheduleRow: scheduleRow, staffRow: staffRow, roomRow: roomRow };
+  window.Modals = { render: render, scheduleRow: scheduleRow, staffRow: staffRow, roomRow: roomRow, dateRow: dateRow };
 })();

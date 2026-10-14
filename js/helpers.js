@@ -152,11 +152,50 @@
     );
   }
 
+  function taskOccursOn(task, iso) {
+    if (!task || !iso) return false;
+    if (task.when === "periodo") return iso >= (task.startDate || task.dueDate) && iso <= task.dueDate;
+    if (task.when === "especificos") return (task.dates || []).indexOf(iso) >= 0;
+    return task.dueDate === iso;
+  }
+
+  function whenText(task) {
+    if (!task) return "";
+    if (task.when === "periodo") return formatShort(task.startDate || task.dueDate) + " – " + formatShort(task.dueDate);
+    if (task.when === "especificos" && task.dates && task.dates.length) {
+      if (task.dates.length <= 3) return task.dates.map(formatShort).join(", ");
+      return task.dates.slice(0, 2).map(formatShort).join(", ") + " +" + (task.dates.length - 2);
+    }
+    return formatShort(task.dueDate);
+  }
+
+  function reminderHits(task) {
+    if (!task || task.done) return false;
+    var today = todayISO();
+    var marks = task.when === "especificos" && task.dates && task.dates.length ? task.dates : [task.dueDate];
+    var reminders = task.reminders || [];
+    return marks.some(function (iso) { return reminders.indexOf(daysBetween(today, iso)) >= 0; });
+  }
+
   function relativeDue(task) {
-    if (task.done) return "Concluída · " + formatShort(task.doneAt || task.dueDate);
-    if (isOverdue(task)) return "Atrasada · " + formatShort(task.dueDate);
-    var days = daysUntil(task);
     var time = task.dueTime ? " · " + task.dueTime : "";
+    if (task.done) return "Concluída · " + formatShort(task.doneAt || task.dueDate);
+    if (isOverdue(task)) return "Atrasada · " + whenText(task);
+    if (task.when === "periodo") {
+      var today = todayISO();
+      var start = task.startDate || task.dueDate;
+      if (start > today) return "Começa " + formatShort(start) + time;
+      var left = daysUntil(task);
+      if (left === 0) return "Termina hoje" + time;
+      if (left === 1) return whenText(task) + " · acaba amanhã" + time;
+      return whenText(task) + " · acaba em " + left + " dias" + time;
+    }
+    if (task.when === "especificos") {
+      var upcoming = (task.dates || []).filter(function (iso) { return iso >= todayISO(); })[0];
+      if (upcoming === todayISO()) return "Hoje · " + whenText(task) + time;
+      return whenText(task) + time;
+    }
+    var days = daysUntil(task);
     if (days === 0) return "Hoje" + time;
     if (days === 1) return "Amanhã" + time;
     if (days > 1 && days < 14) return "Em " + days + " dias" + time;
@@ -300,6 +339,9 @@
     monthTitle: monthTitle,
     weekTitle: weekTitle,
     relativeDue: relativeDue,
+    taskOccursOn: taskOccursOn,
+    whenText: whenText,
+    reminderHits: reminderHits,
     formatMinutes: formatMinutes,
     formatHours: formatHours,
     formatGrade: formatGrade,
