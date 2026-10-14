@@ -142,7 +142,7 @@
       var start = rows[i].querySelector('[name="start"]').value;
       var end = rows[i].querySelector('[name="end"]').value;
       var day = Number(rows[i].querySelector('[name="day"]').value);
-      var slotType = rows[i].querySelector('[name="slotType"]').value === "PL" ? "PL" : "TP";
+      var slotType = H.classTypeId(rows[i].querySelector('[name="slotType"]').value);
       var room = rows[i].querySelector('[name="slotRoom"]').value.trim();
       if (!start && !end && !room) continue;
       if (!start || !end || start >= end) return toast("Cada horário precisa de uma hora de fim depois do início.");
@@ -154,8 +154,18 @@
       var staffName = staffRows[s].querySelector('[name="staffName"]').value.trim();
       if (!staffName) continue;
       staff.push({
-        type: staffRows[s].querySelector('[name="staffType"]').value === "PL" ? "PL" : "TP",
+        type: H.classTypeId(staffRows[s].querySelector('[name="staffType"]').value),
         name: staffName,
+      });
+    }
+    var rooms = [];
+    var roomRows = form.querySelectorAll(".room-row");
+    for (var r = 0; r < roomRows.length; r++) {
+      var roomName = roomRows[r].querySelector('[name="roomName"]').value.trim();
+      if (!roomName) continue;
+      rooms.push({
+        type: H.classTypeId(roomRows[r].querySelector('[name="roomType"]').value),
+        name: roomName,
       });
     }
     var colorBtn = form.querySelector(".swatch.is-selected");
@@ -168,6 +178,7 @@
       icon: iconBtn ? iconBtn.dataset.icon : "book",
       credits: credits,
       staff: staff,
+      rooms: rooms,
       schedule: slots,
     });
     UI.modal = null;
@@ -477,6 +488,16 @@
     if (action === "remove-staff") {
       var staffRow = el.closest(".staff-row");
       if (staffRow) staffRow.remove();
+      return;
+    }
+    if (action === "add-room") {
+      var roomList = document.getElementById("room-list");
+      if (roomList) roomList.insertAdjacentHTML("beforeend", Modals.roomRow({ type: "PL", name: "" }));
+      return;
+    }
+    if (action === "remove-room") {
+      var roomRow = el.closest(".room-row");
+      if (roomRow) roomRow.remove();
       return;
     }
     if (action === "set-minutes") {

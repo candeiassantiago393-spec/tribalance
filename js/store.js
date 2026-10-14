@@ -134,7 +134,13 @@
     return data;
 
     function course(id, name, code, color, icon, credits, staff, schedule) {
-      return { id: id, name: name, code: code, color: color, icon: icon, credits: credits, staff: staff, schedule: schedule };
+      var rooms = [];
+      schedule.forEach(function (entry) {
+        if (!entry.room) return;
+        var exists = rooms.some(function (room) { return room.name === entry.room && room.type === entry.type; });
+        if (!exists) rooms.push({ type: entry.type, name: entry.room });
+      });
+      return { id: id, name: name, code: code, color: color, icon: icon, credits: credits, staff: staff, rooms: rooms, schedule: schedule };
     }
     function person(type, name) {
       return { type: type, name: name };
@@ -160,11 +166,34 @@
     data.courses = (data.courses || []).map(function (item) {
       var staff = Array.isArray(item.staff) ? item.staff.map(function (person) {
         return {
-          type: person && person.type === "PL" ? "PL" : "TP",
+          type: H.classTypeId(person && person.type),
           name: (person && person.name) || "",
         };
       }).filter(function (person) { return person.name; }) : [];
       if (!staff.length && item.professor) staff = [{ type: "TP", name: item.professor }];
+      var schedule = (Array.isArray(item.schedule) ? item.schedule : []).map(function (slot) {
+        return {
+          day: Number(slot.day) || 1,
+          start: slot.start || "",
+          end: slot.end || "",
+          type: H.classTypeId(slot.type),
+          room: slot.room || item.room || "",
+        };
+      });
+      var rooms = Array.isArray(item.rooms) ? item.rooms.map(function (room) {
+        return {
+          type: H.classTypeId(room && room.type),
+          name: (room && room.name) || "",
+        };
+      }).filter(function (room) { return room.name; }) : [];
+      if (!Array.isArray(item.rooms)) {
+        if (item.room) rooms.push({ type: "TP", name: item.room });
+        schedule.forEach(function (slot) {
+          if (!slot.room) return;
+          var exists = rooms.some(function (room) { return room.name === slot.room && room.type === slot.type; });
+          if (!exists) rooms.push({ type: slot.type, name: slot.room });
+        });
+      }
       return {
         id: item.id || H.uid(),
         name: item.name || "Cadeira",
@@ -173,15 +202,8 @@
         icon: H.safeIcon(item.icon),
         credits: Number(item.credits) > 0 ? Number(item.credits) : 6,
         staff: staff,
-        schedule: (Array.isArray(item.schedule) ? item.schedule : []).map(function (slot) {
-          return {
-            day: Number(slot.day) || 1,
-            start: slot.start || "",
-            end: slot.end || "",
-            type: slot.type === "PL" ? "PL" : "TP",
-            room: slot.room || item.room || "",
-          };
-        }),
+        rooms: rooms,
+        schedule: schedule,
       };
     });
     data.tasks = (data.tasks || []).map(function (item) {
@@ -345,8 +367,8 @@
     state.courses.forEach(function (item) {
       (item.schedule || []).forEach(function (slot) {
         if (Number(slot.day) === weekday) {
-          var type = slot.type === "PL" ? "PL" : "TP";
-          var teachers = (item.staff || []).filter(function (person) { return person.type === type; }).map(function (person) { return person.name; });
+          var type = H.classTypeId(slot.type);
+          var teachers = (item.staff || []).filter(function (person) { return person.type === type || person.type === "AMBAS"; }).map(function (person) { return person.name; });
           blocks.push({
             course: item,
             start: slot.start,

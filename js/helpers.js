@@ -37,6 +37,7 @@
   var CLASS_TYPES = [
     { id: "TP", short: "TP", label: "Teórica ou prática" },
     { id: "PL", short: "PL", label: "Prática laboratorial" },
+    { id: "AMBAS", short: "Ambas", label: "Teórica e laboratorial" },
   ];
 
   var REMINDER_OPTIONS = [
@@ -210,8 +211,13 @@
       .toUpperCase() || course.name.slice(0, 3).toUpperCase();
   }
 
+  function classTypeId(id) {
+    if (id === "PL" || id === "AMBAS" || id === "TP") return id;
+    return "TP";
+  }
+
   function classType(id) {
-    var found = CLASS_TYPES.filter(function (item) { return item.id === id; })[0];
+    var found = CLASS_TYPES.filter(function (item) { return item.id === classTypeId(id); })[0];
     return found || CLASS_TYPES[0];
   }
 
@@ -273,6 +279,7 @@
     TYPES: TYPES,
     CLASS_TYPES: CLASS_TYPES,
     classType: classType,
+    classTypeId: classTypeId,
     PRIORITIES: PRIORITIES,
     REMINDER_OPTIONS: REMINDER_OPTIONS,
     esc: esc,

@@ -139,6 +139,11 @@
     return '<div class="today-item" style="--c:' + H.safeColor(block.course.color) + '"><strong>' + H.esc(block.start) + "–" + H.esc(block.end) + "</strong><span>" + H.esc(block.course.name) + "</span><small>" + H.esc(who + " · " + room) + "</small></div>";
   }
 
+  function typeRank(a, b) {
+    var rank = { TP: 0, PL: 1, AMBAS: 2 };
+    return (rank[a.type] || 0) - (rank[b.type] || 0) || String(a.name).localeCompare(String(b.name), "pt");
+  }
+
   function courses() {
     var list = Store.state.courses;
     var cards = list.map(function (course) {
@@ -159,11 +164,17 @@
         "</div></div>" +
         "<h3>" + H.esc(course.name) + "</h3>" +
         ((course.staff && course.staff.length)
-          ? '<div class="staff-lines">' + course.staff.slice().sort(function (a, b) { return a.type === b.type ? a.name.localeCompare(b.name, "pt") : (a.type === "TP" ? -1 : 1); }).map(function (person) {
+          ? '<div class="staff-lines">' + course.staff.slice().sort(typeRank).map(function (person) {
             var kind = H.classType(person.type);
             return '<p class="staff-line"><span class="type-pill type-' + kind.id.toLowerCase() + '">' + kind.short + "</span><span>" + H.esc(person.name) + "</span></p>";
           }).join("") + "</div>"
           : '<p class="muted">Professores por definir</p>') +
+        ((course.rooms && course.rooms.length)
+          ? '<div class="staff-lines">' + course.rooms.slice().sort(typeRank).map(function (room) {
+            var kind = H.classType(room.type);
+            return '<p class="staff-line"><span class="type-pill type-' + kind.id.toLowerCase() + '">' + kind.short + "</span><span>" + H.esc(room.name) + "</span></p>";
+          }).join("") + "</div>"
+          : "") +
         '<div class="chips">' + (slots.length
           ? slots.map(function (slot) {
             var kind = H.classType(slot.type);
@@ -178,7 +189,7 @@
     }).join("");
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>Cadeiras</h1><p class="lede">Professores de TP e de PL, horários, salas, cor e ícone de cada unidade curricular.</p></div>' +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>Cadeiras</h1><p class="lede">Vários professores e salas, de teórica ou prática, prática laboratorial, ou ambas.</p></div>' +
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-course">' + Icons.ui("plus") + "Nova cadeira</button></div></header>" +
       (list.length ? '<div class="cards">' + cards + "</div>" : empty("Ainda não há cadeiras", "Adiciona a primeira para organizar horários, tarefas e notas.", "open-course", "Nova cadeira")) +
       "</section>"
