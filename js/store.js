@@ -9,6 +9,8 @@
     var end = H.addDays(start, 16 * 7 - 1);
     return {
       courses: [],
+      projects: [],
+      events: [],
       tasks: [],
       grades: [],
       sessions: [],
@@ -18,6 +20,7 @@
         semesterEnd: H.toISODate(end),
         notificationsEnabled: false,
         defaultReminders: [0, 1, 7],
+        labels: {},
         demo: false,
         hideDemoNote: false,
       },
@@ -84,6 +87,8 @@
       item.when = "unico";
       item.startDate = item.dueDate;
       item.dates = [];
+      item.projectId = item.id === "t1" ? "p1" : "";
+      item.archived = false;
       if (item.done) item.doneAt = item.dueDate;
       if (item.id === "t3") {
         item.when = "periodo";
@@ -97,6 +102,13 @@
       delete item._offset;
       return item;
     });
+
+    data.projects = [
+      { id: "p1", name: "Protótipo de IPM", description: "Ecrãs principais e fluxo de navegação.", color: "#c6532a", icon: "compass", archived: false },
+    ];
+    data.events = [
+      { id: "ev1", title: "Reunião de grupo", date: H.shiftDays(today, 2), time: "18:30", place: "Biblioteca", notes: "Fechar o fluxo antes da entrega.", courseId: "c5", projectId: "p1", archived: false },
+    ];
 
     data.grades = [
       grade("g1", "c1", "Mini-teste", 15.5, 20, -20),
@@ -219,6 +231,30 @@
         staff: staff,
         rooms: rooms,
         schedule: schedule,
+        archived: Boolean(item.archived),
+      };
+    });
+    data.projects = (data.projects || []).map(function (item) {
+      return {
+        id: item.id || H.uid(),
+        name: item.name || "Projeto",
+        description: item.description || "",
+        color: H.safeColor(item.color),
+        icon: H.safeIcon(item.icon),
+        archived: Boolean(item.archived),
+      };
+    });
+    data.events = (data.events || []).map(function (item) {
+      return {
+        id: item.id || H.uid(),
+        title: item.title || "Evento",
+        date: isoDay(item.date) || H.todayISO(),
+        time: item.time || "",
+        place: item.place || "",
+        notes: item.notes || "",
+        courseId: item.courseId || "",
+        projectId: item.projectId || "",
+        archived: Boolean(item.archived),
       };
     });
     data.tasks = (data.tasks || []).map(function (item) {
@@ -247,6 +283,7 @@
         id: item.id || H.uid(),
         title: item.title || "Tarefa",
         courseId: item.courseId || "",
+        projectId: item.projectId || "",
         type: item.type || "trabalho",
         when: when,
         dueDate: dueDate,
@@ -258,6 +295,8 @@
         doneAt: item.done ? (item.doneAt || item.dueDate || dueDate) : null,
         reminders: Array.isArray(item.reminders) ? item.reminders.map(Number) : [1, 7],
         notes: item.notes || "",
+        archived: Boolean(item.archived),
+        archiveGradeId: item.archiveGradeId || "",
       };
     });
     data.grades = (data.grades || []).map(function (item) {
@@ -280,6 +319,13 @@
     });
     data.settings = Object.assign({}, base.settings, data.settings || {});
     if (!Array.isArray(data.settings.defaultReminders)) data.settings.defaultReminders = [0, 1, 7];
+    var labels = {};
+    var rawLabels = (data.settings && data.settings.labels) || {};
+    H.TERMS.forEach(function (term) {
+      var value = String(rawLabels[term.id] || "").trim().slice(0, 40);
+      if (value) labels[term.id] = value;
+    });
+    data.settings.labels = labels;
     return data;
   }
 
@@ -314,6 +360,22 @@
 
   function courseById(id) {
     return state.courses.filter(function (item) { return item.id === id; })[0] || null;
+  }
+
+  function projectById(id) {
+    return state.projects.filter(function (item) { return item.id === id; })[0] || null;
+  }
+
+  function activeCourses() {
+    return state.courses.filter(function (item) { return !item.archived; });
+  }
+
+  function activeProjects() {
+    return state.projects.filter(function (item) { return !item.archived; });
+  }
+
+  function liveTasks() {
+    return state.tasks.filter(function (item) { return !item.archived; });
   }
 
   function tasksOf(courseId) {
@@ -353,7 +415,7 @@
   }
 
   function globalAverage() {
-    var rows = state.courses.map(function (item) {
+    var rows = state.courses.filter(function (item) { return !item.archived; }).map(function (item) {
       return { course: item, average: courseAverage(item.id) };
     }).filter(function (row) { return row.average != null; });
     if (!rows.length) return null;
@@ -362,17 +424,18 @@
   }
 
   function pendingTasks() {
-    return state.tasks.filter(function (item) { return !item.done; });
+    return liveTasks().filter(function (item) { return !item.done; });
   }
 
   function overdueTasks() {
-    return sortTasks(state.tasks.filter(function (item) { return H.isOverdue(item); }));
+    return sortTasks(liveTasks().filter(function (item) { return H.isOverdue(item); }));
   }
 
   function completionRate() {
-    if (!state.tasks.length) return null;
-    var done = state.tasks.filter(function (item) { return item.done; }).length;
-    return done / state.tasks.length;
+    var tasks = liveTasks();
+    if (!tasks.length) return null;
+    var done = tasks.filter(function (item) { return item.done; }).length;
+    return done / tasks.length;
   }
 
   function studyMinutes(courseId) {
@@ -397,13 +460,20 @@
   }
 
   function tasksDueOn(iso) {
-    return sortTasks(state.tasks.filter(function (item) { return H.taskOccursOn(item, iso); }));
+    return sortTasks(liveTasks().filter(function (item) { return H.taskOccursOn(item, iso); }));
+  }
+
+  function eventsOn(iso) {
+    return state.events.filter(function (item) { return !item.archived && item.date === iso; }).sort(function (a, b) {
+      return (a.time || "99:99") < (b.time || "99:99") ? -1 : 1;
+    });
   }
 
   function classesOn(date) {
     var weekday = H.isoWeekday(date);
     var blocks = [];
     state.courses.forEach(function (item) {
+      if (item.archived) return;
       (item.schedule || []).forEach(function (slot) {
         if (Number(slot.day) === weekday) {
           var type = H.classTypeId(slot.type);
@@ -428,7 +498,7 @@
   }
 
   function activeReminders() {
-    return sortTasks(state.tasks.filter(function (item) {
+    return sortTasks(liveTasks().filter(function (item) {
       return H.reminderHits(item) && !H.isOverdue(item);
     }));
   }
@@ -486,7 +556,7 @@
       var to = H.toISODate(H.addDays(cursor, 6));
       var minutes = studyBetween(from, to);
       var done = state.tasks.filter(function (item) {
-        return item.done && item.doneAt && item.doneAt >= from && item.doneAt <= to;
+        return !item.archived && item.done && item.doneAt && item.doneAt >= from && item.doneAt <= to;
       }).length;
       weeks.push({ from: from, label: H.formatShort(from), minutes: minutes, done: done });
       cursor = H.addDays(cursor, 7);
@@ -497,7 +567,7 @@
 
   function completionByPriority() {
     return H.PRIORITIES.map(function (priority) {
-      var all = state.tasks.filter(function (item) { return item.priority === priority.id; });
+      var all = liveTasks().filter(function (item) { return item.priority === priority.id; });
       var done = all.filter(function (item) { return item.done; }).length;
       return { id: priority.id, label: priority.label, total: all.length, done: done };
     });
@@ -518,6 +588,9 @@
   window.Store = {
     get state() { return state; },
     course: courseById,
+    project: projectById,
+    activeCourses: activeCourses,
+    activeProjects: activeProjects,
     tasksOf: tasksOf,
     gradesOf: gradesOf,
     sessionsOf: sessionsOf,
@@ -532,6 +605,7 @@
     studyBetween: studyBetween,
     thisWeekMinutes: thisWeekMinutes,
     tasksDueOn: tasksDueOn,
+    eventsOn: eventsOn,
     classesOn: classesOn,
     upcomingTasks: upcomingTasks,
     activeReminders: activeReminders,
@@ -548,6 +622,37 @@
       state.tasks = state.tasks.filter(function (item) { return item.courseId !== id; });
       state.grades = state.grades.filter(function (item) { return item.courseId !== id; });
       state.sessions = state.sessions.filter(function (item) { return item.courseId !== id; });
+      state.events.forEach(function (item) { if (item.courseId === id) item.courseId = ""; });
+      save();
+    },
+    archiveCourse: function (id, archived) {
+      var item = courseById(id);
+      if (!item) return;
+      item.archived = archived !== false;
+      save();
+    },
+    saveProject: function (item) { upsert(state.projects, item); save(); },
+    deleteProject: function (id) {
+      state.projects = state.projects.filter(function (item) { return item.id !== id; });
+      state.tasks.forEach(function (item) { if (item.projectId === id) item.projectId = ""; });
+      state.events.forEach(function (item) { if (item.projectId === id) item.projectId = ""; });
+      save();
+    },
+    archiveProject: function (id, archived) {
+      var item = projectById(id);
+      if (!item) return;
+      item.archived = archived !== false;
+      save();
+    },
+    saveEvent: function (item) { upsert(state.events, item); save(); },
+    deleteEvent: function (id) {
+      state.events = state.events.filter(function (item) { return item.id !== id; });
+      save();
+    },
+    archiveEvent: function (id, archived) {
+      var item = state.events.filter(function (event) { return event.id === id; })[0];
+      if (!item) return;
+      item.archived = archived !== false;
       save();
     },
     saveTask: function (item) { upsert(state.tasks, item); save(); },
@@ -557,11 +662,39 @@
     },
     toggleTask: function (id) {
       var item = state.tasks.filter(function (task) { return task.id === id; })[0];
-      if (!item) return null;
+      if (!item || item.archived) return null;
       item.done = !item.done;
       item.doneAt = item.done ? H.todayISO() : null;
       save();
       return item;
+    },
+    archiveTask: function (id, grade) {
+      var item = state.tasks.filter(function (task) { return task.id === id; })[0];
+      if (!item) return null;
+      item.archived = true;
+      item.done = true;
+      item.doneAt = item.doneAt || H.todayISO();
+      if (grade && item.courseId) {
+        var record = {
+          id: H.uid(),
+          courseId: item.courseId,
+          title: grade.title || item.title,
+          score: grade.score,
+          weight: grade.weight,
+          date: item.dueDate || H.todayISO(),
+        };
+        upsert(state.grades, record);
+        item.archiveGradeId = record.id;
+      }
+      save();
+      return item;
+    },
+    restore: function (kind, id) {
+      var list = kind === "course" ? state.courses : kind === "project" ? state.projects : kind === "event" ? state.events : state.tasks;
+      var item = list.filter(function (entry) { return entry.id === id; })[0];
+      if (!item) return;
+      item.archived = false;
+      save();
     },
     saveGrade: function (item) { upsert(state.grades, item); save(); },
     deleteGrade: function (id) {

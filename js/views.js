@@ -1,4 +1,13 @@
 (function () {
+  function placeText(item) {
+    var bits = [];
+    var course = item.courseId ? Store.course(item.courseId) : null;
+    var project = item.projectId ? Store.project(item.projectId) : null;
+    if (course) bits.push(course.name);
+    if (project) bits.push(project.name);
+    return bits.join(" · ") || "Sem ligação";
+  }
+
   function courseDot(course) {
     if (!course) return '<span class="dot" style="--c:#b9b1a6"></span>';
     return '<span class="dot" style="--c:' + H.safeColor(course.color) + '"></span>';
@@ -30,9 +39,10 @@
       '<div class="task-main">' +
       '<div class="task-line"><h3 class="task-title">' + H.esc(task.title) + "</h3>" +
       '<span class="badge badge-' + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span></div>" +
-      '<p class="task-meta">' + courseDot(course) + "<span>" + H.esc(course ? course.name : "Sem cadeira") + "</span><span>·</span><span>" + H.esc(H.typeLabel(task.type)) + "</span><span>·</span><span class=\"" + (overdue ? "danger" : "") + '">' + H.esc(H.relativeDue(task)) + "</span></p>" +
+      '<p class="task-meta">' + courseDot(course) + "<span>" + H.esc(placeText(task)) + "</span><span>·</span><span>" + H.esc(H.typeLabel(task.type)) + "</span><span>·</span><span class=\"" + (overdue ? "danger" : "") + '">' + H.esc(H.relativeDue(task)) + "</span></p>" +
       "</div>" +
       '<div class="task-actions">' +
+      (task.done && !task.archived ? '<button type="button" class="btn btn-ghost btn-sm" data-action="open-archive" data-id="' + task.id + '">Arquivar</button>' : "") +
       '<button type="button" class="icon-btn" data-action="open-task" data-id="' + task.id + '" aria-label="Editar tarefa">' + Icons.ui("edit") + "</button>" +
       '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="task" data-id="' + task.id + '" aria-label="Eliminar tarefa">' + Icons.ui("trash") + "</button>" +
       "</div></article>"
@@ -46,7 +56,7 @@
       '<button type="button" class="deadline' + (overdue ? " is-overdue" : "") + '" data-action="open-task" data-id="' + task.id + '">' +
       '<span class="deadline-date">' + H.esc(overdue ? "Atraso" : H.relativeDue(task).split(" · ")[0]) + "</span>" +
       "<strong>" + H.esc(task.title) + "</strong>" +
-      "<small>" + H.esc((course ? course.code || course.name : "Sem cadeira") + " · " + H.typeLabel(task.type)) + "</small>" +
+      "<small>" + H.esc(placeText(task) + " · " + H.typeLabel(task.type)) + "</small>" +
       "</button>"
     );
   }
@@ -56,18 +66,20 @@
     var pending = Store.pendingTasks();
     var overdue = Store.overdueTasks();
     var rate = Store.completionRate();
-    var doneCount = Store.state.tasks.filter(function (item) { return item.done; }).length;
+    var doneCount = Store.state.tasks.filter(function (item) { return !item.archived && item.done; }).length;
+    var visibleCount = Store.state.tasks.filter(function (item) { return !item.archived; }).length;
     var weekMinutes = Store.thisWeekMinutes();
     var upcoming = Store.upcomingTasks(5);
     var todayClasses = Store.classesOn(new Date());
     var reminders = Store.activeReminders().slice(0, 4);
     var average = Store.globalAverage();
-    var maxMinutes = Store.state.courses.reduce(function (max, course) {
+    var hoursCourses = Store.activeCourses();
+    var maxMinutes = hoursCourses.reduce(function (max, course) {
       return Math.max(max, Store.studyMinutes(course.id));
     }, 0);
 
-    var hours = Store.state.courses.length
-      ? Store.state.courses.map(function (course) {
+    var hours = hoursCourses.length
+      ? hoursCourses.map(function (course) {
         var minutes = Store.studyMinutes(course.id);
         var width = maxMinutes ? Math.max(4, Math.round((minutes / maxMinutes) * 100)) : 0;
         return (
@@ -97,7 +109,7 @@
       '<div class="kpis">' +
       kpi("Pendentes", String(pending.length), pending.length ? "por concluir" : "em dia", "") +
       kpi("Atrasadas", String(overdue.length), overdue.length ? "fora do prazo" : "nenhuma", overdue.length ? " is-alert" : "", "show-overdue") +
-      kpi("Conclusão", H.formatPct(rate == null ? null : rate * 100), Store.state.tasks.length ? doneCount + " de " + Store.state.tasks.length + " tarefas" : "sem tarefas", "") +
+      kpi("Conclusão", H.formatPct(rate == null ? null : rate * 100), visibleCount ? doneCount + " de " + visibleCount + " " + H.term("tarefas").toLowerCase() : "sem " + H.term("tarefas").toLowerCase(), "") +
       kpi("Estudo esta semana", H.formatHours(weekMinutes) + " h", "desde segunda-feira", "") +
       "</div>" +
       '<div class="cols">' +
@@ -145,7 +157,7 @@
   }
 
   function courses() {
-    var list = Store.state.courses;
+    var list = Store.activeCourses();
     var cards = list.map(function (course) {
       var average = Store.courseAverage(course.id);
       var pending = Store.tasksOf(course.id).filter(function (item) { return !item.done; }).length;
@@ -184,13 +196,14 @@
           : '<span class="chip">Horário por definir</span>') + "</div>" +
         '<footer class="course-meta"><span>Média ' + H.esc(H.formatGrade(average)) + "</span><span>" + H.esc(H.countLabel(pending, "pendente", "pendentes")) + "</span><span>" + H.esc(H.formatHours(minutes)) + " h</span></footer>" +
         '<button type="button" class="btn btn-ghost btn-sm" data-action="open-session" data-course="' + course.id + '">Registar estudo</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-course" data-id="' + course.id + '">Arquivar</button>' +
         "</div></article>"
       );
     }).join("");
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>Cadeiras</h1><p class="lede">Vários professores e salas, de teórica ou prática, prática laboratorial, ou ambas.</p></div>' +
-      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-course">' + Icons.ui("plus") + "Nova cadeira</button></div></header>" +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>' + H.esc(H.term("cadeiras")) + '</h1><p class="lede">Vários professores e salas, de teórica ou prática, prática laboratorial, ou ambas.</p></div>' +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-course">' + Icons.ui("plus") + "Nova " + H.esc(H.term("cadeira").toLowerCase()) + "</button></div></header>" +
       (list.length ? '<div class="cards">' + cards + "</div>" : empty("Ainda não há cadeiras", "Adiciona a primeira para organizar horários, tarefas e notas.", "open-course", "Nova cadeira")) +
       "</section>"
     );
@@ -199,10 +212,12 @@
   function tasks() {
     var filter = UI.taskFilter;
     var filtered = Store.sortTasks(Store.state.tasks.filter(function (task) {
+      if (task.archived) return false;
       if (filter.status === "pendentes" && task.done) return false;
       if (filter.status === "concluidas" && !task.done) return false;
       if (filter.status === "atrasadas" && !H.isOverdue(task)) return false;
       if (filter.courseId !== "all" && task.courseId !== filter.courseId) return false;
+      if (filter.projectId && filter.projectId !== "all" && task.projectId !== filter.projectId) return false;
       if (filter.priority !== "all" && task.priority !== filter.priority) return false;
       if (filter.type !== "all" && task.type !== filter.type) return false;
       if (filter.q) {
@@ -212,20 +227,24 @@
       return true;
     }));
 
-    var courseOptions = '<option value="all"' + (filter.courseId === "all" ? " selected" : "") + ">Todas as cadeiras</option>" + Store.state.courses.map(function (course) {
+    var courseOptions = '<option value="all"' + (filter.courseId === "all" ? " selected" : "") + ">Todas as " + H.esc(H.term("cadeiras").toLowerCase()) + "</option>" + Store.activeCourses().map(function (course) {
       return '<option value="' + course.id + '"' + (filter.courseId === course.id ? " selected" : "") + ">" + H.esc(course.name) + "</option>";
+    }).join("");
+    var projectOptions = '<option value="all"' + ((filter.projectId || "all") === "all" ? " selected" : "") + ">Todos os " + H.esc(H.term("projetos").toLowerCase()) + "</option>" + Store.activeProjects().map(function (project) {
+      return '<option value="' + project.id + '"' + (filter.projectId === project.id ? " selected" : "") + ">" + H.esc(project.name) + "</option>";
     }).join("");
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Trabalho</p><h1>Tarefas</h1><p class="lede">Trabalhos, testes, frequências e entregas, num dia, num período ou em dias específicos.</p></div>' +
-      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova tarefa</button></div></header>" +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Trabalho</p><h1>' + H.esc(H.term("tarefas")) + '</h1><p class="lede">Num dia, num período ou em dias específicos. Cada uma pode ficar numa ' + H.esc(H.term("cadeira").toLowerCase()) + ', num ' + H.esc(H.term("projeto").toLowerCase()) + ', ou nos dois. As concluídas podem ir para o ' + H.esc(H.term("arquivo").toLowerCase()) + '.</p></div>' +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova " + H.esc(H.term("tarefa").toLowerCase()) + "</button></div></header>" +
       '<div class="filters">' +
-      '<label class="search">' + Icons.ui("search") + '<input id="task-search" type="search" placeholder="Procurar tarefa" value="' + H.esc(filter.q || "") + '"></label>' +
+      '<label class="search">' + Icons.ui("search") + '<input id="task-search" type="search" placeholder="Procurar" value="' + H.esc(filter.q || "") + '"></label>' +
       select("status", filter.status, '<option value="pendentes">Pendentes</option><option value="atrasadas">Atrasadas</option><option value="concluidas">Concluídas</option><option value="todas">Todas</option>') +
       '<select data-filter="courseId">' + courseOptions + "</select>" +
+      '<select data-filter="projectId">' + projectOptions + "</select>" +
       select("priority", filter.priority, '<option value="all">Todas as prioridades</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>') +
       select("type", filter.type, '<option value="all">Todos os tipos</option>' + H.TYPES.map(function (type) {
-        return '<option value="' + type.id + '">' + H.esc(type.label) + "</option>";
+        return '<option value="' + type.id + '">' + H.esc(H.term(type.id)) + "</option>";
       }).join("")) +
       "</div>" +
       (filtered.length ? '<div class="task-list">' + filtered.map(taskRow).join("") + "</div>" : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa.")) +
@@ -246,8 +265,8 @@
     var title = mode === "week" ? H.weekTitle(H.startOfWeek(cursor)) : H.monthTitle(cursor);
     var body = mode === "week" ? weekView(cursor) : monthView(cursor);
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Agenda</p><h1>Calendário</h1><p class="lede">Aulas na semana e prazos de testes, frequências, trabalhos e entregas.</p></div>' +
-      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova tarefa</button></div></header>" +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Agenda</p><h1>Calendário</h1><p class="lede">Aulas, prazos e ' + H.esc(H.term("eventos").toLowerCase()) + '.</p></div>' +
+      '<div class="page-actions"><button type="button" class="btn btn-ghost" data-action="open-event">' + Icons.ui("plus") + "Novo " + H.esc(H.term("evento").toLowerCase()) + '</button><button type="button" class="btn btn-primary" data-action="open-task">' + Icons.ui("plus") + "Nova " + H.esc(H.term("tarefa").toLowerCase()) + "</button></div></header>" +
       '<div class="cal-toolbar"><div class="segment" data-segment="cal">' +
       '<button type="button" data-action="cal-mode" data-mode="week"' + (mode === "week" ? ' class="is-selected"' : "") + ">Semana</button>" +
       '<button type="button" data-action="cal-mode" data-mode="month"' + (mode === "month" ? ' class="is-selected"' : "") + ">Mês</button></div>" +
@@ -266,13 +285,16 @@
     var days = cells.map(function (date) {
       var iso = H.toISODate(date);
       var inMonth = date.getMonth() === cursor.getMonth();
-      var tasks = Store.tasksDueOn(iso).slice(0, 3);
-      var extra = Store.tasksDueOn(iso).length - tasks.length;
-      var pills = tasks.map(function (task) {
+      var tasks = Store.tasksDueOn(iso);
+      var events = Store.eventsOn(iso);
+      var taskPills = tasks.slice(0, 3);
+      var eventPills = events.slice(0, Math.max(0, 3 - taskPills.length));
+      var extra = tasks.length + events.length - taskPills.length - eventPills.length;
+      var pills = taskPills.map(function (task) {
         var course = Store.course(task.courseId);
         var color = course ? H.safeColor(course.color) : "#3d4f5f";
         return '<button type="button" class="pill' + (H.isOverdue(task) ? " is-overdue" : "") + (task.done ? " is-done" : "") + '" style="--c:' + color + '" data-action="open-task" data-id="' + task.id + '">' + H.esc(task.title) + "</button>";
-      }).join("");
+      }).join("") + eventPills.map(eventPill).join("");
       return (
         '<div class="cell' + (inMonth ? "" : " is-out") + (iso === H.todayISO() ? " is-today" : "") + '" data-action="open-day" data-date="' + iso + '" role="button" tabindex="0">' +
         "<header><span>" + date.getDate() + "</span></header>" + pills +
@@ -309,10 +331,11 @@
     var allday = days.map(function (date) {
       var iso = H.toISODate(date);
       var tasks = Store.tasksDueOn(iso);
+      var events = Store.eventsOn(iso);
       return '<div class="week-all" data-action="open-day" data-date="' + iso + '">' + tasks.map(function (task) {
         var course = Store.course(task.courseId);
         return '<button type="button" class="pill' + (H.isOverdue(task) ? " is-overdue" : "") + (task.done ? " is-done" : "") + '" style="--c:' + (course ? H.safeColor(course.color) : "#3d4f5f") + '" data-action="open-task" data-id="' + task.id + '">' + H.esc(task.title) + "</button>";
-      }).join("") + "</div>";
+      }).join("") + events.map(eventPill).join("") + "</div>";
     }).join("");
 
     var cols = days.map(function (date) {
@@ -337,8 +360,8 @@
 
   function grades() {
     var average = Store.globalAverage();
-    var counted = Store.state.courses.filter(function (course) { return Store.courseAverage(course.id) != null; }).length;
-    var blocks = Store.state.courses.map(function (course) {
+    var counted = Store.activeCourses().filter(function (course) { return Store.courseAverage(course.id) != null; }).length;
+    var blocks = Store.activeCourses().map(function (course) {
       var rows = Store.gradesOf(course.id).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
       var avg = Store.courseAverage(course.id);
       var weights = Store.weightSum(course.id);
@@ -357,9 +380,9 @@
 
     return (
       '<section class="page"><header class="page-head"><div><p class="eyebrow">Classificações</p><h1>Notas</h1><p class="lede">A média da cadeira usa os pesos indicados. A média global pondera pelos créditos.</p></div>' +
-      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-grade"' + (Store.state.courses.length ? "" : " disabled") + ">" + Icons.ui("plus") + "Registar nota</button></div></header>" +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-grade"' + (Store.activeCourses().length ? "" : " disabled") + ">" + Icons.ui("plus") + "Registar nota</button></div></header>" +
       '<section class="global-grade"><div><p class="eyebrow">Média do semestre</p><strong>' + H.esc(H.formatGrade(average)) + '</strong><p class="muted">' + (counted ? H.esc(H.countLabel(counted, "cadeira com notas", "cadeiras com notas")) + ". Escala de 0 a 20." : "Regista classificações para calcular a média.") + "</p></div></section>" +
-      (Store.state.courses.length ? '<div class="stack">' + blocks + "</div>" : empty("Ainda não há cadeiras", "Cria uma cadeira antes de registar classificações.", "open-course", "Nova cadeira")) +
+      (Store.activeCourses().length ? '<div class="stack">' + blocks + "</div>" : empty("Ainda não há cadeiras ativas", "As cadeiras arquivadas deixam de entrar na média.", "open-course", "Nova cadeira")) +
       "</section>"
     );
   }
@@ -475,14 +498,102 @@
     );
   }
 
+  function eventPill(event) {
+    var course = event.courseId ? Store.course(event.courseId) : null;
+    var color = course ? H.safeColor(course.color) : "#8a5a12";
+    return '<button type="button" class="pill is-event" style="--c:' + color + '" data-action="open-event" data-id="' + event.id + '">' + H.esc(event.title) + "</button>";
+  }
+
+  function projects() {
+    var list = Store.activeProjects();
+    var cards = list.map(function (project) {
+      var tasks = Store.state.tasks.filter(function (task) { return task.projectId === project.id && !task.archived; });
+      var pending = tasks.filter(function (task) { return !task.done; }).length;
+      return (
+        '<article class="course-card">' +
+        '<div class="stripe" style="background:' + H.safeColor(project.color) + '"></div>' +
+        '<div class="body">' +
+        '<div class="course-top">' + courseIcon(project, "course-icon") +
+        '<div class="task-actions">' +
+        '<button type="button" class="icon-btn" data-action="open-project" data-id="' + project.id + '" aria-label="Editar projeto">' + Icons.ui("edit") + "</button>" +
+        '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="project" data-id="' + project.id + '" aria-label="Eliminar projeto">' + Icons.ui("trash") + "</button>" +
+        "</div></div>" +
+        "<h3>" + H.esc(project.name) + "</h3>" +
+        (project.description ? "<p>" + H.esc(project.description) + "</p>" : '<p class="muted">Sem descrição.</p>') +
+        '<footer class="course-meta"><span>' + H.esc(H.countLabel(tasks.length, "tarefa", "tarefas")) + "</span><span>" + H.esc(H.countLabel(pending, "pendente", "pendentes")) + "</span></footer>" +
+        '<div class="page-actions"><button type="button" class="btn btn-ghost btn-sm" data-action="open-task" data-project="' + project.id + '">Nova tarefa</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-project" data-id="' + project.id + '">Arquivar</button></div>' +
+        "</div></article>"
+      );
+    }).join("");
+    return (
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Trabalho</p><h1>' + H.esc(H.term("projetos")) + '</h1><p class="lede">Um projeto pode reunir tarefas de várias cadeiras, ou existir sozinho.</p></div>' +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-project">' + Icons.ui("plus") + "Novo " + H.esc(H.term("projeto").toLowerCase()) + "</button></div></header>" +
+      (list.length ? '<div class="cards">' + cards + "</div>" : empty("Ainda não há projetos", "Cria um projeto e liga-lhe tarefas, com ou sem cadeira.", "open-project", "Novo projeto")) +
+      "</section>"
+    );
+  }
+
+  function archive() {
+    var tasks = Store.state.tasks.filter(function (task) { return task.archived; });
+    var courses = Store.state.courses.filter(function (course) { return course.archived; });
+    var projects = Store.state.projects.filter(function (project) { return project.archived; });
+    var events = Store.state.events.filter(function (event) { return event.archived; });
+    function restore(kind, id, label) {
+      return '<button type="button" class="btn btn-ghost btn-sm" data-action="restore" data-entity="' + kind + '" data-id="' + id + '">Repor</button>';
+    }
+    var taskHtml = tasks.length ? tasks.map(function (task) {
+      var grade = task.archiveGradeId ? Store.state.grades.filter(function (item) { return item.id === task.archiveGradeId; })[0] : null;
+      return '<article class="task"><div class="task-main"><h3 class="task-title">' + H.esc(task.title) + '</h3><p class="task-meta"><span>' + H.esc(placeText(task)) + "</span><span>·</span><span>" + H.esc(H.whenText(task)) + "</span>" +
+        (grade ? "<span>·</span><span>Nota " + H.esc(H.formatGrade(grade.score)) + " · " + H.esc(String(grade.weight).replace(".", ",")) + "%</span>" : "") +
+        "</p></div>" + restore("task", task.id) + "</article>";
+    }).join("") : '<p class="muted">Sem tarefas arquivadas.</p>';
+    var courseHtml = courses.length ? '<div class="cards">' + courses.map(function (course) {
+      return '<article class="course-card"><div class="stripe" style="background:' + H.safeColor(course.color) + '"></div><div class="body"><h3>' + H.esc(course.name) + '</h3><p class="muted">Média ' + H.esc(H.formatGrade(Store.courseAverage(course.id))) + '</p>' + restore("course", course.id) + "</div></article>";
+    }).join("") + "</div>" : '<p class="muted">Sem cadeiras arquivadas.</p>';
+    var projectHtml = projects.length ? projects.map(function (project) {
+      return '<article class="task"><div class="task-main"><h3 class="task-title">' + H.esc(project.name) + "</h3><p class=\"task-meta\">" + H.esc(project.description || "Sem descrição") + "</p></div>" + restore("project", project.id) + "</article>";
+    }).join("") : '<p class="muted">Sem projetos arquivados.</p>';
+    var eventHtml = events.length ? events.map(function (event) {
+      return '<article class="task"><div class="task-main"><h3 class="task-title">' + H.esc(event.title) + "</h3><p class=\"task-meta\">" + H.esc(H.formatShort(event.date) + (event.time ? " " + event.time : "") + (event.place ? " · " + event.place : "")) + "</p></div>" + restore("event", event.id) + "</article>";
+    }).join("") : '<p class="muted">Sem eventos arquivados.</p>';
+    var emptyAll = !tasks.length && !courses.length && !projects.length && !events.length;
+    return (
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Histórico</p><h1>' + H.esc(H.term("arquivo")) + '</h1><p class="lede">Tarefas concluídas, cadeiras, projetos e eventos que já não queres na lista ativa. Uma tarefa concluída pode levar uma nota para a média.</p></div></header>' +
+      (emptyAll ? empty("O arquivo está vazio", "Conclui uma tarefa e escolhe Arquivar, ou arquiva uma cadeira a partir da lista.") : "") +
+      '<div class="stack"><section class="card"><header class="card-head"><h2>Tarefas</h2></header><div class="task-list">' + taskHtml + "</div></section>" +
+      '<section class="card"><header class="card-head"><h2>Cadeiras</h2></header>' + courseHtml + "</section>" +
+      '<section class="card"><header class="card-head"><h2>Projetos</h2></header><div class="task-list">' + projectHtml + "</div></section>" +
+      '<section class="card"><header class="card-head"><h2>Eventos</h2></header><div class="task-list">' + eventHtml + "</div></section></div></section>"
+    );
+  }
+
+  function customize() {
+    var types = H.TERMS.filter(function (item) { return item.group === "tipos"; });
+    var names = H.TERMS.filter(function (item) { return item.group === "nomes"; });
+    function fields(list) {
+      return list.map(function (item) {
+        return '<label class="field"><span>' + H.esc(item.label) + '</span><input name="term-' + item.id + '" maxlength="40" value="' + H.esc(H.term(item.id)) + '"></label>';
+      }).join("");
+    }
+    return (
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">A tua linguagem</p><h1>Personalizar</h1><p class="lede">Troca os nomes que a aplicação usa. Por exemplo, Teste pode passar a Exame e Frequência a Atividade.</p></div></header>' +
+      '<form id="form-labels" class="card terms-card"><h2>Tipos de tarefa</h2><div class="term-grid">' + fields(types) + '</div><h2>Nomes das secções</h2><div class="term-grid">' + fields(names) + '</div>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-ghost" data-action="reset-labels">Repor nomes</button><button type="submit" class="btn btn-primary">Guardar</button></div></form></section>'
+    );
+  }
+
   window.Views = {
     classItem: classItem,
     dashboard: dashboard,
     courses: courses,
+    projects: projects,
     tasks: tasks,
     calendar: calendar,
     grades: grades,
     stats: stats,
     reminders: reminders,
+    archive: archive,
+    customize: customize,
   };
 })();

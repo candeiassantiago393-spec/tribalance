@@ -28,6 +28,22 @@
     { id: "entrega", label: "Entrega" },
   ];
 
+  var TERMS = [
+    { id: "trabalho", label: "Trabalho", group: "tipos" },
+    { id: "teste", label: "Teste", group: "tipos" },
+    { id: "frequencia", label: "Frequência", group: "tipos" },
+    { id: "entrega", label: "Entrega", group: "tipos" },
+    { id: "cadeira", label: "Cadeira", group: "nomes" },
+    { id: "cadeiras", label: "Cadeiras", group: "nomes" },
+    { id: "tarefa", label: "Tarefa", group: "nomes" },
+    { id: "tarefas", label: "Tarefas", group: "nomes" },
+    { id: "projeto", label: "Projeto", group: "nomes" },
+    { id: "projetos", label: "Projetos", group: "nomes" },
+    { id: "evento", label: "Evento", group: "nomes" },
+    { id: "eventos", label: "Eventos", group: "nomes" },
+    { id: "arquivo", label: "Arquivo", group: "nomes" },
+  ];
+
   var PRIORITIES = [
     { id: "baixa", label: "Baixa" },
     { id: "media", label: "Média" },
@@ -260,9 +276,22 @@
     return found || CLASS_TYPES[0];
   }
 
+  function term(id) {
+    var custom = "";
+    if (window.Store && Store.state && Store.state.settings && Store.state.settings.labels) {
+      custom = Store.state.settings.labels[id];
+    }
+    custom = String(custom || "").trim();
+    if (custom) return custom.slice(0, 40);
+    var found = TERMS.filter(function (item) { return item.id === id; })[0];
+    return found ? found.label : id;
+  }
+
   function typeLabel(id) {
+    var named = TERMS.filter(function (item) { return item.id === id && item.group === "tipos"; })[0];
+    if (named) return term(id);
     var found = TYPES.filter(function (item) { return item.id === id; })[0];
-    return found ? found.label : "Tarefa";
+    return found ? found.label : term("tarefa");
   }
 
   function priorityLabel(id) {
@@ -316,6 +345,8 @@
     PALETTE: PALETTE,
     COURSE_ICONS: COURSE_ICONS,
     TYPES: TYPES,
+    TERMS: TERMS,
+    term: term,
     CLASS_TYPES: CLASS_TYPES,
     classType: classType,
     classTypeId: classTypeId,

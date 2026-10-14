@@ -10,10 +10,20 @@
     }).join("") + "</div>";
   }
 
-  function courseOptions(selected) {
-    return Store.state.courses.map(function (course) {
-      return '<option value="' + course.id + '"' + (course.id === selected ? " selected" : "") + ">" + H.esc(course.name) + "</option>";
+  function linkedOptions(list, selected, emptyLabel) {
+    var rows = (list || []).filter(function (item) { return !item.archived || item.id === selected; });
+    var html = emptyLabel ? '<option value="">' + H.esc(emptyLabel) + "</option>" : "";
+    return html + rows.map(function (item) {
+      return '<option value="' + item.id + '"' + (item.id === selected ? " selected" : "") + ">" + H.esc(item.name) + "</option>";
     }).join("");
+  }
+
+  function courseOptions(selected, withEmpty) {
+    return linkedOptions(Store.state.courses, selected, withEmpty ? "Nenhuma" : "");
+  }
+
+  function projectOptions(selected, withEmpty) {
+    return linkedOptions(Store.state.projects, selected, withEmpty ? "Nenhum" : "");
   }
 
   function typeOptions(selected) {
@@ -108,13 +118,14 @@
   }
 
   function taskForm() {
-    if (!Store.state.courses.length) {
-      return shell("Nova tarefa", '<p>Cria primeiro uma cadeira para poderes associar a tarefa.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Fechar</button><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
-    }
     var existing = UI.modal.id ? Store.state.tasks.filter(function (item) { return item.id === UI.modal.id; })[0] : null;
+    if (!existing && !Store.activeCourses().length && !Store.activeProjects().length) {
+      return shell("Nova " + H.term("tarefa").toLowerCase(), '<p>Cria primeiro uma ' + H.esc(H.term("cadeira").toLowerCase()) + " ou um " + H.esc(H.term("projeto").toLowerCase()) + '.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Fechar</button><button type="button" class="btn btn-primary" data-action="open-course">Nova ' + H.esc(H.term("cadeira").toLowerCase()) + '</button><button type="button" class="btn btn-ghost" data-action="open-project">Novo ' + H.esc(H.term("projeto").toLowerCase()) + "</button></div></div>");
+    }
     var task = existing || {
       title: "",
-      courseId: UI.modal.courseId || Store.state.courses[0].id,
+      courseId: UI.modal.courseId || "",
+      projectId: UI.modal.projectId || "",
       type: "trabalho",
       priority: "media",
       dueDate: UI.modal.due || H.todayISO(),
@@ -137,11 +148,16 @@
       { id: "periodo", label: "Período" },
       { id: "especificos", label: "Dias específicos" },
     ];
+    var typeChoices = H.TYPES.map(function (type) { return { id: type.id, label: H.term(type.id) }; });
     var body = (
       '<form id="form-task">' +
       field("Título", '<input name="title" required maxlength="100" value="' + H.esc(task.title) + '" placeholder="Ex.: Frequência de Matemática">') +
-      field("Cadeira", '<select name="courseId">' + courseOptions(task.courseId) + "</select>") +
-      '<div class="field"><span>Tipo</span>' + segment("type", H.TYPES, task.type) + "</div>" +
+      '<div class="form-grid">' +
+      field(H.term("cadeira"), '<select name="courseId">' + courseOptions(task.courseId, true) + "</select>") +
+      field(H.term("projeto"), '<select name="projectId">' + projectOptions(task.projectId, true) + "</select>") +
+      "</div>" +
+      '<p class="hint">Podes ligar a uma ' + H.esc(H.term("cadeira").toLowerCase()) + ", a um " + H.esc(H.term("projeto").toLowerCase()) + ", ou às duas.</p>" +
+      '<div class="field"><span>Tipo</span>' + segment("type", typeChoices, task.type) + "</div>" +
       '<div class="field"><span>Prioridade</span>' + segment("priority", H.PRIORITIES, task.priority) + "</div>" +
       '<div class="field"><span>Quando</span>' + segment("when", whenOptions, when) + '<small class="hint">Dia único, um período de um dia a outro, ou vários dias à escolha.</small></div>' +
       '<div class="when-panel' + (when === "unico" ? " is-on" : "") + '" data-when="unico">' +
@@ -162,12 +178,12 @@
   }
 
   function gradeForm() {
-    if (!Store.state.courses.length) {
-      return shell("Registar nota", '<p>Cria uma cadeira antes de registar classificações.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
+    if (!Store.activeCourses().length && !(UI.modal.id)) {
+      return shell("Registar nota", '<p>Cria uma cadeira ativa antes de registar classificações.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
     }
     var existing = UI.modal.id ? Store.state.grades.filter(function (item) { return item.id === UI.modal.id; })[0] : null;
     var grade = existing || {
-      courseId: UI.modal.courseId || Store.state.courses[0].id,
+      courseId: UI.modal.courseId || (Store.activeCourses()[0] ? Store.activeCourses()[0].id : ""),
       title: "",
       score: "",
       weight: "",
@@ -188,10 +204,10 @@
   }
 
   function sessionForm() {
-    if (!Store.state.courses.length) {
+    if (!Store.activeCourses().length) {
       return shell("Registar estudo", '<p>Cria uma cadeira para associares o tempo de estudo.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
     }
-    var courseId = UI.modal.courseId || Store.state.courses[0].id;
+    var courseId = UI.modal.courseId || Store.activeCourses()[0].id;
     var body = (
       '<form id="form-session">' +
       field("Cadeira", '<select name="courseId">' + courseOptions(courseId) + "</select>") +
@@ -219,10 +235,17 @@
         return '<button type="button" class="deadline' + (H.isOverdue(task) ? " is-overdue" : "") + '" data-action="open-task" data-id="' + task.id + '"><span class="deadline-date">' + H.esc(H.typeLabel(task.type)) + "</span><strong>" + H.esc(task.title) + "</strong><small>" + H.esc(course ? course.name : "Sem cadeira") + (task.done ? " · concluída" : "") + "</small></button>";
       }).join("") + "</div>"
       : '<p class="muted">Sem testes, frequências ou entregas.</p>';
+    var events = Store.eventsOn(iso);
+    var eventHtml = events.length
+      ? '<div class="task-list compact">' + events.map(function (event) {
+        return '<button type="button" class="deadline" data-action="open-event" data-id="' + event.id + '"><span class="deadline-date">' + H.esc(event.time || H.term("evento")) + "</span><strong>" + H.esc(event.title) + "</strong><small>" + H.esc(event.place || "Sem local") + "</small></button>";
+      }).join("") + "</div>"
+      : '<p class="muted">Sem eventos neste dia.</p>';
     var body = (
       "<h3 class=\"subhead\">Aulas</h3>" + classHtml +
+      "<h3 class=\"subhead\">" + H.esc(H.term("eventos")) + "</h3>" + eventHtml +
       "<h3 class=\"subhead\">Prazos</h3>" + taskHtml +
-      '<div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-primary" data-action="open-task" data-due="' + iso + '">Nova tarefa neste dia</button></div></div>'
+      '<div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="open-event" data-due="' + iso + '">Novo ' + H.esc(H.term("evento").toLowerCase()) + '</button><button type="button" class="btn btn-primary" data-action="open-task" data-due="' + iso + '">Nova tarefa neste dia</button></div></div>'
     );
     return shell(H.formatFull(iso), body, false);
   }
@@ -263,6 +286,14 @@
     } else if (modal.entity === "session") {
       title = "Eliminar sessão";
       text = "Eliminar este registo de estudo?";
+    } else if (modal.entity === "project") {
+      var project = Store.project(modal.id);
+      title = "Eliminar projeto";
+      text = "Eliminar «" + (project ? project.name : "este projeto") + "»? As tarefas mantêm-se, mas deixam de estar ligadas a ele.";
+    } else if (modal.entity === "event") {
+      var eventItem = Store.state.events.filter(function (item) { return item.id === modal.id; })[0];
+      title = "Eliminar evento";
+      text = eventItem ? "Eliminar «" + eventItem.title + "»?" : "Eliminar este evento?";
     } else if (modal.entity === "all") {
       title = "Começar do zero";
       text = "Eliminar cadeiras, tarefas, notas e sessões de estudo? O nome e as datas do semestre mantêm-se.";
@@ -277,11 +308,63 @@
     return shell(title, body, false);
   }
 
+  function projectForm() {
+    var existing = UI.modal.id ? Store.project(UI.modal.id) : null;
+    var project = existing || { name: "", description: "", color: H.PALETTE[0].value, icon: "compass", archived: false };
+    var body = (
+      '<form id="form-project">' +
+      field("Nome", '<input name="name" required maxlength="80" value="' + H.esc(project.name) + '" placeholder="Ex.: Protótipo">') +
+      field("Descrição", '<textarea name="description" maxlength="300" placeholder="O que este projeto inclui…">' + H.esc(project.description || "") + "</textarea>") +
+      field("Cor", swatches(project.color)) +
+      field("Ícone", iconPicks(project.icon)) +
+      '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="project" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
+    );
+    return shell(existing ? "Editar projeto" : "Novo projeto", body, true);
+  }
+
+  function eventForm() {
+    var existing = UI.modal.id ? Store.state.events.filter(function (item) { return item.id === UI.modal.id; })[0] : null;
+    var eventItem = existing || { title: "", date: UI.modal.due || H.todayISO(), time: "", place: "", notes: "", courseId: "", projectId: "" };
+    var body = (
+      '<form id="form-event">' +
+      field("Título", '<input name="title" required maxlength="100" value="' + H.esc(eventItem.title) + '" placeholder="Ex.: Reunião de grupo">') +
+      '<div class="form-grid">' +
+      field("Dia", '<input type="date" name="date" required value="' + H.esc(eventItem.date) + '">') +
+      field("Hora", '<input type="time" name="time" value="' + H.esc(eventItem.time || "") + '">') +
+      "</div>" +
+      field("Local", '<input name="place" maxlength="80" value="' + H.esc(eventItem.place || "") + '" placeholder="Ex.: Biblioteca">') +
+      '<div class="form-grid">' +
+      field(H.term("cadeira"), '<select name="courseId">' + courseOptions(eventItem.courseId, true) + "</select>") +
+      field(H.term("projeto"), '<select name="projectId">' + projectOptions(eventItem.projectId, true) + "</select>") +
+      "</div>" +
+      field("Notas", '<textarea name="notes" maxlength="500">' + H.esc(eventItem.notes || "") + "</textarea>") +
+      '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-event" data-id="' + existing.id + '">Arquivar</button><button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="event" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
+    );
+    return shell(existing ? "Editar evento" : "Novo evento", body, true);
+  }
+
+  function archiveForm() {
+    var task = Store.state.tasks.filter(function (item) { return item.id === UI.modal.id; })[0];
+    if (!task) return "";
+    var course = task.courseId ? Store.course(task.courseId) : null;
+    var gradeFields = course
+      ? '<div class="form-grid">' + field("Nota", '<input name="score" inputmode="decimal" placeholder="0–20">', "Opcional.") + field("Peso", '<input name="weight" inputmode="decimal" placeholder="%">', "Obrigatório se houver nota.") + "</div><p class=\"hint\">A nota entra na média de " + H.esc(course.name) + ".</p>"
+      : "<p>Esta tarefa não tem cadeira, por isso fica arquivada sem nota.</p>";
+    var body = (
+      '<form id="form-archive"><p>Arquivar «' + H.esc(task.title) + "»? Deixa de aparecer nas listas ativas.</p>" + gradeFields +
+      '<div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Arquivar</button></div></div></form>'
+    );
+    return shell("Arquivar tarefa", body, false);
+  }
+
   function render() {
     var modal = UI.modal;
     if (!modal) return "";
     if (modal.type === "course") return courseForm();
     if (modal.type === "task") return taskForm();
+    if (modal.type === "project") return projectForm();
+    if (modal.type === "event") return eventForm();
+    if (modal.type === "archive") return archiveForm();
     if (modal.type === "grade") return gradeForm();
     if (modal.type === "session") return sessionForm();
     if (modal.type === "day") return dayPanel();

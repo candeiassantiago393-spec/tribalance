@@ -2,31 +2,40 @@
   var HASH = {
     dashboard: "painel",
     courses: "cadeiras",
+    projects: "projetos",
     tasks: "tarefas",
     calendar: "calendario",
     grades: "notas",
     stats: "estatisticas",
     reminders: "lembretes",
+    archive: "arquivo",
+    customize: "personalizar",
   };
   var FROM_HASH = {};
   Object.keys(HASH).forEach(function (key) { FROM_HASH[HASH[key]] = key; });
 
-  var TITLES = {
-    dashboard: "Painel",
-    courses: "Cadeiras",
-    tasks: "Tarefas",
-    calendar: "Calendário",
-    grades: "Notas",
-    stats: "Estatísticas",
-    reminders: "Lembretes",
-  };
+  function pageTitle(view) {
+    var titles = {
+      dashboard: "Painel",
+      courses: H.term("cadeiras"),
+      projects: H.term("projetos"),
+      tasks: H.term("tarefas"),
+      calendar: "Calendário",
+      grades: "Notas",
+      stats: "Estatísticas",
+      reminders: "Lembretes",
+      archive: H.term("arquivo"),
+      customize: "Personalizar",
+    };
+    return titles[view] || "Painel";
+  }
 
   window.UI = {
     view: "dashboard",
     modal: null,
     returnModal: null,
     focusModal: false,
-    taskFilter: { status: "pendentes", courseId: "all", priority: "all", type: "all", q: "" },
+    taskFilter: { status: "pendentes", courseId: "all", projectId: "all", priority: "all", type: "all", q: "" },
     calMode: "month",
     calDate: new Date(),
   };
@@ -56,6 +65,8 @@
       button.classList.toggle("is-active", on);
       if (on) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
+      var label = button.querySelector(".nav-label");
+      if (label) label.textContent = pageTitle(button.dataset.view);
     });
 
     var settings = Store.state.settings;
@@ -70,7 +81,7 @@
     });
 
     var overdue = Store.overdueTasks().length;
-    document.title = (overdue ? "(" + overdue + ") " : "") + TITLES[view] + " · TriBalance";
+    document.title = (overdue ? "(" + overdue + ") " : "") + pageTitle(view) + " · TriBalance";
 
     if (searchFocus) {
       var input = document.getElementById("task-search");
@@ -170,6 +181,7 @@
     }
     var colorBtn = form.querySelector(".swatch.is-selected");
     var iconBtn = form.querySelector(".icon-opt.is-selected");
+    var previous = UI.modal && UI.modal.id ? Store.course(UI.modal.id) : null;
     Store.saveCourse({
       id: (UI.modal && UI.modal.id) || H.uid(),
       name: name,
@@ -180,6 +192,7 @@
       staff: staff,
       rooms: rooms,
       schedule: slots,
+      archived: previous ? Boolean(previous.archived) : false,
     });
     UI.modal = null;
     UI.returnModal = null;
@@ -190,7 +203,9 @@
   function saveTask(form) {
     var title = val(form, "title").trim();
     if (!title) return toast("Indica o título da tarefa.");
-    if (!val(form, "courseId")) return toast("Escolhe a cadeira.");
+    var courseId = val(form, "courseId");
+    var projectId = val(form, "projectId");
+    if (!courseId && !projectId) return toast("Liga a tarefa a uma " + H.term("cadeira").toLowerCase() + " ou a um " + H.term("projeto").toLowerCase() + ".");
     var existing = UI.modal && UI.modal.id
       ? Store.state.tasks.filter(function (item) { return item.id === UI.modal.id; })[0]
       : null;
@@ -227,7 +242,8 @@
     Store.saveTask({
       id: existing ? existing.id : H.uid(),
       title: title,
-      courseId: val(form, "courseId"),
+      courseId: courseId,
+      projectId: projectId,
       type: readSegment(form, "type") || "trabalho",
       priority: readSegment(form, "priority") || "media",
       when: when,
@@ -239,10 +255,91 @@
       done: done,
       doneAt: done ? ((existing && existing.doneAt) || H.todayISO()) : null,
       reminders: reminders,
+      archived: existing ? Boolean(existing.archived) : false,
+      archiveGradeId: existing ? existing.archiveGradeId || "" : "",
     });
     UI.modal = null;
     UI.returnModal = null;
     toast(done ? "Tarefa concluída." : "Tarefa guardada.");
+    render();
+  }
+
+  function saveProject(form) {
+    var name = val(form, "name").trim();
+    if (!name) return toast("Indica o nome do projeto.");
+    var existing = UI.modal && UI.modal.id ? Store.project(UI.modal.id) : null;
+    var colorBtn = form.querySelector(".swatch.is-selected");
+    var iconBtn = form.querySelector(".icon-opt.is-selected");
+    Store.saveProject({
+      id: existing ? existing.id : H.uid(),
+      name: name,
+      description: val(form, "description").trim(),
+      color: colorBtn ? colorBtn.dataset.color : H.PALETTE[0].value,
+      icon: iconBtn ? iconBtn.dataset.icon : "compass",
+      archived: existing ? Boolean(existing.archived) : false,
+    });
+    UI.modal = null;
+    UI.returnModal = null;
+    toast("Projeto guardado.");
+    render();
+  }
+
+  function saveEvent(form) {
+    var title = val(form, "title").trim();
+    var date = val(form, "date");
+    if (!title) return toast("Indica o título do evento.");
+    if (!date) return toast("Indica o dia do evento.");
+    var existing = UI.modal && UI.modal.id
+      ? Store.state.events.filter(function (item) { return item.id === UI.modal.id; })[0]
+      : null;
+    Store.saveEvent({
+      id: existing ? existing.id : H.uid(),
+      title: title,
+      date: date,
+      time: val(form, "time"),
+      place: val(form, "place").trim(),
+      notes: val(form, "notes").trim(),
+      courseId: val(form, "courseId"),
+      projectId: val(form, "projectId"),
+      archived: existing ? Boolean(existing.archived) : false,
+    });
+    UI.modal = null;
+    UI.returnModal = null;
+    toast("Evento guardado.");
+    render();
+  }
+
+  function saveArchive(form) {
+    var task = UI.modal && UI.modal.id
+      ? Store.state.tasks.filter(function (item) { return item.id === UI.modal.id; })[0]
+      : null;
+    if (!task) return closeModal();
+    var scoreRaw = val(form, "score").trim();
+    var weightRaw = val(form, "weight").trim();
+    var grade = null;
+    if (scoreRaw || weightRaw) {
+      if (!task.courseId) return toast("Sem cadeira, a tarefa arquiva-se sem nota.");
+      var score = H.readNumber(scoreRaw);
+      var weight = H.readNumber(weightRaw);
+      if (Number.isNaN(score) || score < 0 || score > 20) return toast("A nota tem de estar entre 0 e 20.");
+      if (Number.isNaN(weight) || weight <= 0 || weight > 100) return toast("O peso tem de estar entre 1 e 100.");
+      grade = { title: task.title, score: score, weight: weight };
+    }
+    Store.archiveTask(task.id, grade);
+    UI.modal = null;
+    UI.returnModal = null;
+    toast(grade ? "Tarefa arquivada com nota." : "Tarefa arquivada.");
+    render();
+  }
+
+  function saveLabels(form) {
+    var labels = {};
+    H.TERMS.forEach(function (term) {
+      var value = val(form, "term-" + term.id).trim();
+      if (value) labels[term.id] = value;
+    });
+    Store.updateSettings({ labels: labels });
+    toast("Nomes atualizados.");
     render();
   }
 
@@ -312,6 +409,12 @@
     } else if (modal.entity === "session") {
       Store.deleteSession(modal.id);
       toast("Sessão eliminada.");
+    } else if (modal.entity === "project") {
+      Store.deleteProject(modal.id);
+      toast("Projeto eliminado.");
+    } else if (modal.entity === "event") {
+      Store.deleteEvent(modal.id);
+      toast("Evento eliminado.");
     } else if (modal.entity === "all") {
       Store.clearAll();
       toast("Dados apagados.");
@@ -414,7 +517,49 @@
       return;
     }
     if (action === "open-task") {
-      openModal({ type: "task", id: el.dataset.id || "", due: el.dataset.due || "", courseId: el.dataset.course || "" });
+      openModal({ type: "task", id: el.dataset.id || "", due: el.dataset.due || "", courseId: el.dataset.course || "", projectId: el.dataset.project || "" });
+      return;
+    }
+    if (action === "open-project") {
+      openModal({ type: "project", id: el.dataset.id || "" });
+      return;
+    }
+    if (action === "open-event") {
+      openModal({ type: "event", id: el.dataset.id || "", due: el.dataset.due || "" });
+      return;
+    }
+    if (action === "open-archive") {
+      openModal({ type: "archive", id: el.dataset.id || "" });
+      return;
+    }
+    if (action === "archive-course") {
+      Store.archiveCourse(el.dataset.id, true);
+      toast("Cadeira arquivada.");
+      render();
+      return;
+    }
+    if (action === "archive-project") {
+      Store.archiveProject(el.dataset.id, true);
+      toast("Projeto arquivado.");
+      render();
+      return;
+    }
+    if (action === "archive-event") {
+      Store.archiveEvent(el.dataset.id, true);
+      toast("Evento arquivado.");
+      closeModal();
+      return;
+    }
+    if (action === "restore") {
+      Store.restore(el.dataset.entity, el.dataset.id);
+      toast("Reposto na lista ativa.");
+      render();
+      return;
+    }
+    if (action === "reset-labels") {
+      Store.updateSettings({ labels: {} });
+      toast("Nomes originais repostos.");
+      render();
       return;
     }
     if (action === "open-grade") {
@@ -456,7 +601,7 @@
       return;
     }
     if (action === "show-overdue") {
-      UI.taskFilter = { status: "atrasadas", courseId: "all", priority: "all", type: "all", q: "" };
+      UI.taskFilter = { status: "atrasadas", courseId: "all", projectId: "all", priority: "all", type: "all", q: "" };
       setView("tasks");
       return;
     }
@@ -554,11 +699,15 @@
   document.addEventListener("submit", function (event) {
     var form = event.target;
     if (!form || !form.id) return;
-    if (form.id === "form-course" || form.id === "form-task" || form.id === "form-grade" || form.id === "form-session" || form.id === "form-settings") {
+    if (form.id === "form-course" || form.id === "form-task" || form.id === "form-grade" || form.id === "form-session" || form.id === "form-settings" || form.id === "form-project" || form.id === "form-event" || form.id === "form-archive" || form.id === "form-labels") {
       event.preventDefault();
     }
     if (form.id === "form-course") saveCourse(form);
     if (form.id === "form-task") saveTask(form);
+    if (form.id === "form-project") saveProject(form);
+    if (form.id === "form-event") saveEvent(form);
+    if (form.id === "form-archive") saveArchive(form);
+    if (form.id === "form-labels") saveLabels(form);
     if (form.id === "form-grade") saveGrade(form);
     if (form.id === "form-session") saveSession(form);
     if (form.id === "form-settings") saveSettings(form);
