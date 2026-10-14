@@ -34,6 +34,11 @@
     { id: "alta", label: "Alta" },
   ];
 
+  var CLASS_TYPES = [
+    { id: "TP", short: "TP", label: "Teórica ou prática" },
+    { id: "PL", short: "PL", label: "Prática laboratorial" },
+  ];
+
   var REMINDER_OPTIONS = [
     { days: 0, label: "No próprio dia" },
     { days: 1, label: "1 dia antes" },
@@ -205,6 +210,11 @@
       .toUpperCase() || course.name.slice(0, 3).toUpperCase();
   }
 
+  function classType(id) {
+    var found = CLASS_TYPES.filter(function (item) { return item.id === id; })[0];
+    return found || CLASS_TYPES[0];
+  }
+
   function typeLabel(id) {
     var found = TYPES.filter(function (item) { return item.id === id; })[0];
     return found ? found.label : "Tarefa";
@@ -261,6 +271,8 @@
     PALETTE: PALETTE,
     COURSE_ICONS: COURSE_ICONS,
     TYPES: TYPES,
+    CLASS_TYPES: CLASS_TYPES,
+    classType: classType,
     PRIORITIES: PRIORITIES,
     REMINDER_OPTIONS: REMINDER_OPTIONS,
     esc: esc,

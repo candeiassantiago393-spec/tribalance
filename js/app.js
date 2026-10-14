@@ -142,9 +142,21 @@
       var start = rows[i].querySelector('[name="start"]').value;
       var end = rows[i].querySelector('[name="end"]').value;
       var day = Number(rows[i].querySelector('[name="day"]').value);
-      if (!start && !end) continue;
+      var slotType = rows[i].querySelector('[name="slotType"]').value === "PL" ? "PL" : "TP";
+      var room = rows[i].querySelector('[name="slotRoom"]').value.trim();
+      if (!start && !end && !room) continue;
       if (!start || !end || start >= end) return toast("Cada horário precisa de uma hora de fim depois do início.");
-      slots.push({ day: day, start: start, end: end });
+      slots.push({ day: day, start: start, end: end, type: slotType, room: room });
+    }
+    var staff = [];
+    var staffRows = form.querySelectorAll(".staff-row");
+    for (var s = 0; s < staffRows.length; s++) {
+      var staffName = staffRows[s].querySelector('[name="staffName"]').value.trim();
+      if (!staffName) continue;
+      staff.push({
+        type: staffRows[s].querySelector('[name="staffType"]').value === "PL" ? "PL" : "TP",
+        name: staffName,
+      });
     }
     var colorBtn = form.querySelector(".swatch.is-selected");
     var iconBtn = form.querySelector(".icon-opt.is-selected");
@@ -152,11 +164,10 @@
       id: (UI.modal && UI.modal.id) || H.uid(),
       name: name,
       code: val(form, "code").trim().toUpperCase(),
-      professor: val(form, "professor").trim(),
-      room: val(form, "room").trim(),
       color: colorBtn ? colorBtn.dataset.color : H.PALETTE[0].value,
       icon: iconBtn ? iconBtn.dataset.icon : "book",
       credits: credits,
+      staff: staff,
       schedule: slots,
     });
     UI.modal = null;
@@ -450,12 +461,22 @@
     }
     if (action === "add-slot") {
       var list = document.getElementById("schedule-list");
-      if (list) list.insertAdjacentHTML("beforeend", Modals.scheduleRow({ day: 1, start: "09:00", end: "11:00" }));
+      if (list) list.insertAdjacentHTML("beforeend", Modals.scheduleRow({ day: 1, start: "09:00", end: "11:00", type: "PL", room: "" }));
       return;
     }
     if (action === "remove-slot") {
       var row = el.closest(".schedule-row");
       if (row) row.remove();
+      return;
+    }
+    if (action === "add-staff") {
+      var staffList = document.getElementById("staff-list");
+      if (staffList) staffList.insertAdjacentHTML("beforeend", Modals.staffRow({ type: "PL", name: "" }));
+      return;
+    }
+    if (action === "remove-staff") {
+      var staffRow = el.closest(".staff-row");
+      if (staffRow) staffRow.remove();
       return;
     }
     if (action === "set-minutes") {

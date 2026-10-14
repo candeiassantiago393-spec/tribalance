@@ -110,7 +110,7 @@
       '<section class="card"><header class="card-head"><h2>Horário de hoje</h2></header>' +
       (todayClasses.length
         ? '<div class="today-list">' + todayClasses.map(function (block) {
-          return '<div class="today-item" style="--c:' + H.safeColor(block.course.color) + '"><strong>' + H.esc(block.start) + "–" + H.esc(block.end) + "</strong><span>" + H.esc(block.course.name) + "</span><small>" + H.esc(block.course.room || "Sala por definir") + "</small></div>";
+          return classItem(block);
         }).join("") + "</div>"
         : '<p class="muted">Sem aulas hoje.</p>') +
       "</section>" +
@@ -132,6 +132,13 @@
     );
   }
 
+  function classItem(block) {
+    var kind = H.classType(block.type);
+    var who = block.teacher ? kind.short + " · " + block.teacher : kind.label;
+    var room = block.room || "Sala por definir";
+    return '<div class="today-item" style="--c:' + H.safeColor(block.course.color) + '"><strong>' + H.esc(block.start) + "–" + H.esc(block.end) + "</strong><span>" + H.esc(block.course.name) + "</span><small>" + H.esc(who + " · " + room) + "</small></div>";
+  }
+
   function courses() {
     var list = Store.state.courses;
     var cards = list.map(function (course) {
@@ -151,10 +158,17 @@
         '<button type="button" class="icon-btn" data-action="ask-delete" data-entity="course" data-id="' + course.id + '" aria-label="Eliminar cadeira">' + Icons.ui("trash") + "</button>" +
         "</div></div>" +
         "<h3>" + H.esc(course.name) + "</h3>" +
-        '<p class="muted">' + H.esc(course.professor || "Professor por definir") + (course.room ? " · Sala " + H.esc(course.room) : "") + "</p>" +
+        ((course.staff && course.staff.length)
+          ? '<div class="staff-lines">' + course.staff.slice().sort(function (a, b) { return a.type === b.type ? a.name.localeCompare(b.name, "pt") : (a.type === "TP" ? -1 : 1); }).map(function (person) {
+            var kind = H.classType(person.type);
+            return '<p class="staff-line"><span class="type-pill type-' + kind.id.toLowerCase() + '">' + kind.short + "</span><span>" + H.esc(person.name) + "</span></p>";
+          }).join("") + "</div>"
+          : '<p class="muted">Professores por definir</p>') +
         '<div class="chips">' + (slots.length
           ? slots.map(function (slot) {
-            return '<span class="chip">' + H.esc(H.dayShort(Number(slot.day)) + " " + slot.start + "–" + slot.end) + "</span>";
+            var kind = H.classType(slot.type);
+            var room = slot.room ? " · " + slot.room : "";
+            return '<span class="chip"><span class="type-pill type-' + kind.id.toLowerCase() + '">' + kind.short + "</span>" + H.esc(H.dayShort(Number(slot.day)) + " " + slot.start + "–" + slot.end + room) + "</span>";
           }).join("")
           : '<span class="chip">Horário por definir</span>') + "</div>" +
         '<footer class="course-meta"><span>Média ' + H.esc(H.formatGrade(average)) + "</span><span>" + H.esc(H.countLabel(pending, "pendente", "pendentes")) + "</span><span>" + H.esc(H.formatHours(minutes)) + " h</span></footer>" +
@@ -164,7 +178,7 @@
     }).join("");
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>Cadeiras</h1><p class="lede">Professor, sala, horário, cor e ícone de cada unidade curricular.</p></div>' +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Organização</p><h1>Cadeiras</h1><p class="lede">Professores de TP e de PL, horários, salas, cor e ícone de cada unidade curricular.</p></div>' +
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-course">' + Icons.ui("plus") + "Nova cadeira</button></div></header>" +
       (list.length ? '<div class="cards">' + cards + "</div>" : empty("Ainda não há cadeiras", "Adiciona a primeira para organizar horários, tarefas e notas.", "open-course", "Nova cadeira")) +
       "</section>"
@@ -294,7 +308,7 @@
       var classBlocks = Store.classesOn(date).map(function (block) {
         var top = (H.parseHour(block.start) - boundStart) * 52;
         var blockHeight = Math.max(28, (H.parseHour(block.end) - H.parseHour(block.start)) * 52 - 4);
-        return '<button type="button" class="block" style="top:' + top + "px;height:" + blockHeight + "px;background:" + H.safeColor(block.course.color) + '" data-action="open-course" data-id="' + block.course.id + '"><strong>' + H.esc(block.course.code || block.course.name) + "</strong><span>" + H.esc(block.start) + "–" + H.esc(block.end) + "</span></button>";
+        return '<button type="button" class="block" style="top:' + top + "px;height:" + blockHeight + "px;background:" + H.safeColor(block.course.color) + '" data-action="open-course" data-id="' + block.course.id + '"><strong>' + H.esc((block.course.code || block.course.name) + " · " + H.classType(block.type).short) + "</strong><span>" + H.esc(block.start) + "–" + H.esc(block.end) + "</span></button>";
       }).join("");
       return '<div class="week-col" style="height:' + height + 'px">' + classBlocks + "</div>";
     }).join("");
@@ -451,6 +465,7 @@
   }
 
   window.Views = {
+    classItem: classItem,
     dashboard: dashboard,
     courses: courses,
     tasks: tasks,

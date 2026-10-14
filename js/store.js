@@ -29,20 +29,37 @@
     var data = blank();
     data.settings.demo = true;
     data.courses = [
-      course("c1", "Programação Orientada a Objetos", "POO", "Ana Ribeiro", "B2.14", "#2c4a6e", "code", 6, [
-        slot(1, "10:00", "12:00"), slot(3, "14:00", "16:00"),
+      course("c1", "Programação Orientada a Objetos", "POO", "#2c4a6e", "code", 6, [
+        person("TP", "Ana Ribeiro"), person("PL", "Rui Costa"),
+      ], [
+        slot(1, "10:00", "12:00", "TP", "B2.14"),
+        slot(3, "14:00", "16:00", "TP", "B2.14"),
+        slot(5, "16:00", "18:00", "PL", "Lab 1"),
       ]),
-      course("c2", "Matemática Discreta", "MD", "Carlos Mendes", "A1.03", "#8a5a12", "sigma", 6, [
-        slot(2, "09:00", "11:00"), slot(4, "09:00", "11:00"),
+      course("c2", "Matemática Discreta", "MD", "#8a5a12", "sigma", 6, [
+        person("TP", "Carlos Mendes"), person("PL", "Helena Duarte"),
+      ], [
+        slot(2, "09:00", "11:00", "TP", "A1.03"),
+        slot(4, "09:00", "11:00", "TP", "A1.03"),
+        slot(4, "14:00", "16:00", "PL", "Lab 2"),
       ]),
-      course("c3", "Bases de Dados", "BD", "Inês Carvalho", "Lab 3", "#1d6b62", "database", 6, [
-        slot(2, "14:00", "16:00"), slot(5, "10:00", "12:00"),
+      course("c3", "Bases de Dados", "BD", "#1d6b62", "database", 6, [
+        person("TP", "Inês Carvalho"), person("PL", "Pedro Almeida"),
+      ], [
+        slot(2, "14:00", "16:00", "TP", "B1.20"),
+        slot(5, "10:00", "12:00", "PL", "Lab 3"),
       ]),
-      course("c4", "Redes de Computadores", "RC", "João Silva", "C0.21", "#6d3b6a", "share", 6, [
-        slot(3, "09:00", "11:00"), slot(5, "14:00", "16:00"),
+      course("c4", "Redes de Computadores", "RC", "#6d3b6a", "share", 6, [
+        person("TP", "João Silva"), person("PL", "Sofia Nunes"),
+      ], [
+        slot(3, "09:00", "11:00", "TP", "C0.21"),
+        slot(5, "14:00", "16:00", "PL", "Lab 4"),
       ]),
-      course("c5", "Interface Pessoa-Máquina", "IPM", "Marta Lopes", "D1.10", "#c6532a", "compass", 6, [
-        slot(4, "14:00", "17:00"),
+      course("c5", "Interface Pessoa-Máquina", "IPM", "#c6532a", "compass", 6, [
+        person("TP", "Marta Lopes"), person("PL", "André Pinto"),
+      ], [
+        slot(4, "14:00", "17:00", "TP", "D1.10"),
+        slot(2, "16:00", "18:00", "PL", "Lab 5"),
       ]),
     ];
 
@@ -116,11 +133,14 @@
     });
     return data;
 
-    function course(id, name, code, professor, room, color, icon, credits, schedule) {
-      return { id: id, name: name, code: code, professor: professor, room: room, color: color, icon: icon, credits: credits, schedule: schedule };
+    function course(id, name, code, color, icon, credits, staff, schedule) {
+      return { id: id, name: name, code: code, color: color, icon: icon, credits: credits, staff: staff, schedule: schedule };
     }
-    function slot(day, start, end) {
-      return { day: day, start: start, end: end };
+    function person(type, name) {
+      return { type: type, name: name };
+    }
+    function slot(day, start, end, type, room) {
+      return { day: day, start: start, end: end, type: type, room: room };
     }
     function task(id, title, courseId, type, offset, dueTime, priority, done, reminders, notes) {
       return {
@@ -138,16 +158,30 @@
     var base = blank();
     data = data || {};
     data.courses = (data.courses || []).map(function (item) {
+      var staff = Array.isArray(item.staff) ? item.staff.map(function (person) {
+        return {
+          type: person && person.type === "PL" ? "PL" : "TP",
+          name: (person && person.name) || "",
+        };
+      }).filter(function (person) { return person.name; }) : [];
+      if (!staff.length && item.professor) staff = [{ type: "TP", name: item.professor }];
       return {
         id: item.id || H.uid(),
         name: item.name || "Cadeira",
         code: item.code || "",
-        professor: item.professor || "",
-        room: item.room || "",
         color: H.safeColor(item.color),
         icon: H.safeIcon(item.icon),
         credits: Number(item.credits) > 0 ? Number(item.credits) : 6,
-        schedule: Array.isArray(item.schedule) ? item.schedule : [],
+        staff: staff,
+        schedule: (Array.isArray(item.schedule) ? item.schedule : []).map(function (slot) {
+          return {
+            day: Number(slot.day) || 1,
+            start: slot.start || "",
+            end: slot.end || "",
+            type: slot.type === "PL" ? "PL" : "TP",
+            room: slot.room || item.room || "",
+          };
+        }),
       };
     });
     data.tasks = (data.tasks || []).map(function (item) {
@@ -194,6 +228,10 @@
       if (!raw) return seed();
       var parsed = JSON.parse(raw);
       if (!parsed || !Array.isArray(parsed.courses)) return seed();
+      var demoWithoutTypes = parsed.settings && parsed.settings.demo && !(parsed.courses || []).some(function (course) {
+        return Array.isArray(course.staff) && course.staff.length;
+      });
+      if (demoWithoutTypes) return seed();
       return normalize(parsed);
     } catch (err) {
       return seed();
@@ -307,10 +345,15 @@
     state.courses.forEach(function (item) {
       (item.schedule || []).forEach(function (slot) {
         if (Number(slot.day) === weekday) {
+          var type = slot.type === "PL" ? "PL" : "TP";
+          var teachers = (item.staff || []).filter(function (person) { return person.type === type; }).map(function (person) { return person.name; });
           blocks.push({
             course: item,
             start: slot.start,
             end: slot.end,
+            type: type,
+            room: slot.room || "",
+            teacher: teachers.join(", "),
           });
         }
       });

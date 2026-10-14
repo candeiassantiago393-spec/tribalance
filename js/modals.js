@@ -16,13 +16,26 @@
     }).join("");
   }
 
+  function typeOptions(selected) {
+    return H.CLASS_TYPES.map(function (kind) {
+      return '<option value="' + kind.id + '"' + (selected === kind.id ? " selected" : "") + ">" + H.esc(kind.short + " · " + kind.label) + "</option>";
+    }).join("");
+  }
+
+  function staffRow(person) {
+    person = person || { type: "TP", name: "" };
+    return (
+      '<div class="staff-row"><select name="staffType">' + typeOptions(person.type === "PL" ? "PL" : "TP") + '</select><input name="staffName" maxlength="80" value="' + H.esc(person.name || "") + '" placeholder="Nome do professor"><button type="button" class="icon-btn" data-action="remove-staff" aria-label="Remover professor">' + Icons.ui("close") + "</button></div>"
+    );
+  }
+
   function scheduleRow(slot) {
-    slot = slot || { day: 1, start: "09:00", end: "11:00" };
+    slot = slot || { day: 1, start: "09:00", end: "11:00", type: "TP", room: "" };
     var days = [1, 2, 3, 4, 5, 6, 7].map(function (day) {
       return '<option value="' + day + '"' + (Number(slot.day) === day ? " selected" : "") + ">" + H.esc(H.dayName(day)) + "</option>";
     }).join("");
     return (
-      '<div class="schedule-row"><select name="day">' + days + '</select><input type="time" name="start" value="' + H.esc(slot.start || "09:00") + '" required><span>às</span><input type="time" name="end" value="' + H.esc(slot.end || "11:00") + '" required><button type="button" class="icon-btn" data-action="remove-slot" aria-label="Remover horário">' + Icons.ui("close") + "</button></div>"
+      '<div class="schedule-row"><select name="slotType">' + typeOptions(slot.type === "PL" ? "PL" : "TP") + '</select><select name="day">' + days + '</select><input type="time" name="start" value="' + H.esc(slot.start || "09:00") + '" required><span>às</span><input type="time" name="end" value="' + H.esc(slot.end || "11:00") + '" required><input name="slotRoom" maxlength="40" value="' + H.esc(slot.room || "") + '" placeholder="Sala"><button type="button" class="icon-btn" data-action="remove-slot" aria-label="Remover horário">' + Icons.ui("close") + "</button></div>"
     );
   }
 
@@ -54,14 +67,14 @@
       id: "",
       name: "",
       code: "",
-      professor: "",
-      room: "",
       color: H.PALETTE[0].value,
       icon: "book",
       credits: 6,
-      schedule: [{ day: 1, start: "09:00", end: "11:00" }],
+      staff: [{ type: "TP", name: "" }, { type: "PL", name: "" }],
+      schedule: [{ day: 1, start: "09:00", end: "11:00", type: "TP", room: "" }],
     };
-    var slots = (course.schedule && course.schedule.length ? course.schedule : [{ day: 1, start: "09:00", end: "11:00" }]).map(scheduleRow).join("");
+    var people = course.staff && course.staff.length ? course.staff : [{ type: "TP", name: "" }, { type: "PL", name: "" }];
+    var slots = course.schedule && course.schedule.length ? course.schedule : [{ day: 1, start: "09:00", end: "11:00", type: "TP", room: "" }];
     var body = (
       '<form id="form-course">' +
       field("Nome", '<input name="name" required maxlength="80" value="' + H.esc(course.name) + '" placeholder="Ex.: Bases de Dados">') +
@@ -69,13 +82,10 @@
       field("Sigla", '<input name="code" maxlength="8" value="' + H.esc(course.code || "") + '" placeholder="BD">') +
       field("Créditos ECTS", '<input name="credits" type="number" min="1" max="30" step="0.5" value="' + H.esc(course.credits || 6) + '">', "Ponderam a média global.") +
       "</div>" +
-      '<div class="form-grid">' +
-      field("Professor", '<input name="professor" maxlength="80" value="' + H.esc(course.professor || "") + '">') +
-      field("Sala", '<input name="room" maxlength="40" value="' + H.esc(course.room || "") + '" placeholder="Lab 3">') +
-      "</div>" +
+      '<div class="field"><span>Professores</span><div id="staff-list">' + people.map(staffRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-staff">Adicionar professor</button><small class="hint">Podes ter vários, por exemplo um de TP e outro de PL.</small></div>' +
       field("Cor", swatches(course.color)) +
       field("Ícone", iconPicks(course.icon)) +
-      '<div class="field"><span>Horário</span><div id="schedule-list">' + slots + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-slot">Adicionar horário</button></div>' +
+      '<div class="field"><span>Horário</span><div id="schedule-list">' + slots.map(scheduleRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-slot">Adicionar horário</button><small class="hint">Cada horário é TP ou PL e pode ter a sua sala.</small></div>' +
       '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="course" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
     );
     return shell(existing ? "Editar cadeira" : "Nova cadeira", body, true);
@@ -168,7 +178,7 @@
     var tasks = Store.tasksDueOn(iso);
     var classHtml = classes.length
       ? classes.map(function (block) {
-        return '<div class="today-item" style="--c:' + H.safeColor(block.course.color) + '"><strong>' + H.esc(block.start) + "–" + H.esc(block.end) + "</strong><span>" + H.esc(block.course.name) + "</span><small>" + H.esc(block.course.room || "Sala por definir") + "</small></div>";
+        return Views.classItem(block);
       }).join("")
       : '<p class="muted">Sem aulas neste dia.</p>';
     var taskHtml = tasks.length
@@ -248,5 +258,5 @@
     return "";
   }
 
-  window.Modals = { render: render, scheduleRow: scheduleRow };
+  window.Modals = { render: render, scheduleRow: scheduleRow, staffRow: staffRow };
 })();
