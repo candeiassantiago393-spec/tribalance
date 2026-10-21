@@ -69,18 +69,19 @@
     var doneCount = Store.state.tasks.filter(function (item) { return !item.archived && item.done; }).length;
     var visibleCount = Store.state.tasks.filter(function (item) { return !item.archived; }).length;
     var weekMinutes = Store.thisWeekMinutes();
+    var week = Store.periodRange("semana");
     var upcoming = Store.upcomingTasks(5);
     var todayClasses = Store.classesOn(new Date());
     var reminders = Store.activeReminders().slice(0, 4);
     var average = Store.globalAverage();
     var hoursCourses = Store.activeCourses();
     var maxMinutes = hoursCourses.reduce(function (max, course) {
-      return Math.max(max, Store.studyMinutes(course.id));
+      return Math.max(max, Store.studyBetween(week.from, week.to, course.id));
     }, 0);
 
     var hours = hoursCourses.length
       ? hoursCourses.map(function (course) {
-        var minutes = Store.studyMinutes(course.id);
+        var minutes = Store.studyBetween(week.from, week.to, course.id);
         var width = maxMinutes ? Math.max(4, Math.round((minutes / maxMinutes) * 100)) : 0;
         return (
           '<div class="bar-row">' +
@@ -116,7 +117,8 @@
       '<section class="card"><header class="card-head"><h2>Próximos prazos</h2><button type="button" class="text-btn" data-action="nav" data-view="tasks">Ver tarefas</button></header>' +
       (upcoming.length ? '<div class="deadlines">' + upcoming.map(deadlineItem).join("") + "</div>" : empty("Sem prazos próximos", "As tarefas por concluir aparecem aqui por ordem de entrega.")) +
       "</section>" +
-      '<section class="card"><header class="card-head"><h2>Horas estudadas</h2><span class="muted">no semestre</span></header><div class="bars">' + hours + "</div>" +
+      '<section class="card"><header class="card-head"><h2>Horas estudadas</h2><span class="muted">esta semana</span></header><div class="bars">' + hours + "</div>" +
+      '<p class="muted">Volta a zero à segunda-feira. O mês e o semestre ficam nas estatísticas.</p>' +
       '<p class="average-line">Média global <strong>' + H.esc(H.formatGrade(average)) + "</strong></p></section></div>" +
       '<div class="cols">' +
       '<section class="card"><header class="card-head"><h2>Horário de hoje</h2></header>' +
@@ -437,19 +439,28 @@
   }
 
   function stats() {
+    var period = UI.statsPeriod === "semana" || UI.statsPeriod === "mes" ? UI.statsPeriod : "semestre";
+    var range = Store.periodRange(period);
     var rate = Store.completionRate();
-    var days = Store.weekdayStudy().slice().sort(function (a, b) { return b.minutes - a.minutes; });
+    var days = Store.weekdayStudy(range.from, range.to).slice().sort(function (a, b) { return b.minutes - a.minutes; });
     var maxDay = days.reduce(function (max, day) { return Math.max(max, day.minutes); }, 0);
     var top = days[0] && days[0].minutes ? days[0] : null;
-    var weeks = Store.weeklyEvolution();
+    var weeks = Store.weeklyEvolution().filter(function (week) {
+      var to = H.toISODate(H.addDays(H.parseISODate(week.from), 6));
+      return week.from <= range.to && to >= range.from;
+    });
     var maxWeek = weeks.reduce(function (max, week) { return Math.max(max, week.minutes); }, 0);
     var priorities = Store.completionByPriority();
-    var recent = Store.state.sessions.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
+    var periodSessions = Store.state.sessions.filter(function (item) {
+      return item.date >= range.from && item.date <= range.to;
+    });
+    var periodMinutes = Store.studyBetween(range.from, range.to);
+    var recent = periodSessions.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
     var circ = 2 * Math.PI * 42;
     var pct = rate == null ? 0 : rate;
     var dash = circ * pct;
 
-    var dayBars = Store.state.sessions.length
+    var dayBars = periodSessions.length
       ? days.map(function (day) {
         var width = maxDay ? Math.round((day.minutes / maxDay) * 100) : 0;
         return '<div class="bar-row"><div class="bar-label">' + H.esc(day.label) + '</div><div class="bar"><span style="width:' + width + '%"></span></div><strong>' + H.esc(H.formatMinutes(day.minutes)) + "</strong></div>";
@@ -461,36 +472,51 @@
         var height = Math.max(week.minutes ? 8 : 0, Math.round((week.minutes / maxWeek) * 100));
         return '<div class="evo-col"><span class="evo-count">' + week.done + '</span><div class="evo-bar-wrap"><div class="evo-bar" style="height:' + height + '%"></div></div><span>' + H.esc(week.label) + "</span></div>";
       }).join("") + "</div>"
-      : '<p class="muted">A evolução aparece quando houver sessões de estudo no semestre.</p>';
+      : '<p class="muted">A evolução aparece quando houver sessões de estudo neste período.</p>';
 
-    var courseShare = Store.state.courses.map(function (course) {
-      var minutes = Store.studyMinutes(course.id);
-      var total = Store.studyMinutes();
-      var width = total ? Math.round((minutes / total) * 100) : 0;
-      return '<div class="bar-row"><div class="bar-label"><span class="dot" style="--c:' + H.safeColor(course.color) + '"></span>' + H.esc(course.code || course.name) + '</div><div class="bar"><span style="width:' + width + "%;background:" + H.safeColor(course.color) + '"></span></div><strong>' + width + "%</strong></div>";
+    var courseMax = Store.activeCourses().reduce(function (max, course) {
+      return Math.max(max, Store.studyBetween(range.from, range.to, course.id));
+    }, 0);
+    var courseShare = Store.activeCourses().map(function (course) {
+      var minutes = Store.studyBetween(range.from, range.to, course.id);
+      var width = courseMax ? Math.round((minutes / courseMax) * 100) : 0;
+      return '<div class="bar-row"><div class="bar-label"><span class="dot" style="--c:' + H.safeColor(course.color) + '"></span>' + H.esc(course.code || course.name) + '</div><div class="bar"><span style="width:' + width + "%;background:" + H.safeColor(course.color) + '"></span></div><strong>' + H.esc(H.formatHours(minutes)) + " h</strong></div>";
     }).join("");
+    var periodButtons = [
+      { id: "semana", label: "Semana" },
+      { id: "mes", label: "Mês" },
+      { id: "semestre", label: "Semestre" },
+    ].map(function (item) {
+      return '<button type="button" class="chip-btn' + (item.id === period ? " is-selected" : "") + '" data-action="stats-period" data-period="' + item.id + '">' + item.label + "</button>";
+    }).join("");
+    var periodHint = period === "semana"
+      ? "segunda a domingo"
+      : period === "mes"
+        ? H.monthTitle(new Date())
+        : "de " + H.formatShort(range.from) + " a " + H.formatShort(range.to);
 
     return (
-      '<section class="page"><header class="page-head"><div><p class="eyebrow">Produtividade</p><h1>Estatísticas</h1><p class="lede">Como o estudo e a conclusão de tarefas evoluem ao longo do semestre.</p></div>' +
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Produtividade</p><h1>Estatísticas</h1><p class="lede">O painel mostra só a semana em curso. Aqui vês a semana, o mês ou o semestre inteiro.</p></div>' +
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-session">' + Icons.ui("study") + "Registar estudo</button></div></header>" +
+      '<div class="chip-row">' + periodButtons + "</div>" +
       '<div class="kpis">' +
-      kpi("Tempo médio por sessão", Store.averageSession() == null ? "—" : H.formatMinutes(Store.averageSession()), Store.state.sessions.length ? H.countLabel(Store.state.sessions.length, "sessão registada", "sessões registadas") : "sem sessões", "") +
-      kpi("Por dia de estudo", Store.averagePerStudyDay() == null ? "—" : H.formatMinutes(Store.averagePerStudyDay()), "média nos dias com registo", "") +
-      kpi("Por semana", Store.averagePerWeek() == null ? "—" : H.formatMinutes(Store.averagePerWeek()), "desde o início do semestre", "") +
+      kpi("Horas no período", H.formatHours(periodMinutes) + " h", periodHint, "") +
+      kpi("Tempo médio por sessão", Store.averageSession(range.from, range.to) == null ? "—" : H.formatMinutes(Store.averageSession(range.from, range.to)), periodSessions.length ? H.countLabel(periodSessions.length, "sessão neste período", "sessões neste período") : "sem sessões", "") +
+      kpi("Por dia de estudo", Store.averagePerStudyDay(range.from, range.to) == null ? "—" : H.formatMinutes(Store.averagePerStudyDay(range.from, range.to)), "média nos dias com registo", "") +
       kpi("Taxa de conclusão", H.formatPct(rate == null ? null : rate * 100), Store.state.tasks.length ? "de todas as tarefas" : "sem tarefas", "") +
       "</div>" +
       '<div class="cols">' +
       '<section class="card"><header class="card-head"><h2>Dias mais produtivos</h2></header>' +
-      (top ? '<p class="lede tight">' + H.esc(H.WEEKDAYS_LONG[top.day - 1].charAt(0).toUpperCase() + H.WEEKDAYS_LONG[top.day - 1].slice(1)) + " concentra a maior parte do estudo.</p>" + '<div class="bars">' + dayBars + "</div>" : empty("Sem sessões de estudo", "Regista tempo de estudo para descobrires os dias em que rendes mais.", "open-session", "Registar estudo")) +
+      (top ? '<p class="lede tight">' + H.esc(H.WEEKDAYS_LONG[top.day - 1].charAt(0).toUpperCase() + H.WEEKDAYS_LONG[top.day - 1].slice(1)) + " concentra a maior parte do estudo.</p>" + '<div class="bars">' + dayBars + "</div>" : empty("Sem sessões neste período", "As horas das outras semanas continuam no mês e no semestre.", "open-session", "Registar estudo")) +
       "</section>" +
       '<section class="card completion-card"><header class="card-head"><h2>Taxa de conclusão</h2></header><div class="completion">' +
       '<svg class="donut" viewBox="0 0 120 120"><circle class="donut-track" cx="60" cy="60" r="42"></circle><circle class="donut-value" cx="60" cy="60" r="42" stroke-dasharray="' + dash.toFixed(2) + " " + (circ - dash).toFixed(2) + '" transform="rotate(-90 60 60)"></circle><text x="60" y="66" text-anchor="middle">' + H.esc(H.formatPct(rate == null ? null : rate * 100)) + "</text></svg>" +
       '<div class="priority-split">' + priorities.map(function (item) {
         return "<p><span class=\"badge badge-" + item.id + '">' + H.esc(item.label) + "</span> " + item.done + " de " + item.total + "</p>";
       }).join("") + "</div></div></section></div>" +
-      '<section class="card"><header class="card-head"><h2>Evolução ao longo do semestre</h2><span class="muted">barras: horas · número: tarefas concluídas</span></header>' + evolution + "</section>" +
-      '<div class="cols"><section class="card"><header class="card-head"><h2>Distribuição do estudo</h2></header>' +
-      (Store.studyMinutes() ? '<div class="bars">' + courseShare + "</div>" : '<p class="muted">Ainda sem horas registadas.</p>') +
+      '<section class="card"><header class="card-head"><h2>Evolução ' + H.esc(range.label) + '</h2><span class="muted">barras: horas · número: tarefas concluídas</span></header>' + evolution + "</section>" +
+      '<div class="cols"><section class="card"><header class="card-head"><h2>Horas por cadeira</h2><span class="muted">' + H.esc(range.label) + "</span></header>" +
+      (periodMinutes ? '<div class="bars">' + courseShare + "</div>" : '<p class="muted">Ainda sem horas registadas neste período.</p>') +
       '</section><section class="card"><header class="card-head"><h2>Sessões recentes</h2></header>' +
       (recent.length ? '<div class="session-list">' + recent.map(function (session) {
         var course = Store.course(session.courseId);

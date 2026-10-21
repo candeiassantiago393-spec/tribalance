@@ -54,6 +54,7 @@
     taskLayout: "list",
     projectId: "",
     projectFilter: "tudo",
+    statsPeriod: "semestre",
     calMode: "month",
     calDate: new Date(),
   };
@@ -675,6 +676,11 @@
     }
     if (action === "project-filter") {
       UI.projectFilter = el.dataset.filter || "tudo";
+      render();
+      return;
+    }
+    if (action === "stats-period") {
+      UI.statsPeriod = el.dataset.period || "semestre";
       render();
       return;
     }

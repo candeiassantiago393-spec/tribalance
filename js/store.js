@@ -490,10 +490,28 @@
     }, 0);
   }
 
+  function periodRange(period) {
+    var today = new Date();
+    if (period === "semana") {
+      var start = H.startOfWeek(today);
+      return { id: "semana", from: H.toISODate(start), to: H.toISODate(H.addDays(start, 6)), label: "esta semana" };
+    }
+    if (period === "mes") {
+      var first = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+      var last = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
+      return { id: "mes", from: H.toISODate(first), to: H.toISODate(last), label: "este mês" };
+    }
+    return {
+      id: "semestre",
+      from: state.settings.semesterStart,
+      to: state.settings.semesterEnd,
+      label: "no semestre",
+    };
+  }
+
   function thisWeekMinutes() {
-    var start = H.toISODate(H.startOfWeek(new Date()));
-    var end = H.toISODate(H.addDays(H.parseISODate(start), 6));
-    return studyBetween(start, end);
+    var range = periodRange("semana");
+    return studyBetween(range.from, range.to);
   }
 
   function tasksDueOn(iso) {
@@ -544,9 +562,10 @@
     return overdueTasks().length + activeReminders().length;
   }
 
-  function weekdayStudy() {
+  function weekdayStudy(fromISO, toISO) {
     var totals = [0, 0, 0, 0, 0, 0, 0];
     state.sessions.forEach(function (item) {
+      if (fromISO && (item.date < fromISO || item.date > toISO)) return;
       var index = H.isoWeekday(H.parseISODate(item.date)) - 1;
       totals[index] += item.minutes;
     });
@@ -555,17 +574,27 @@
     });
   }
 
-  function averageSession() {
-    if (!state.sessions.length) return null;
-    return studyMinutes() / state.sessions.length;
+  function sessionsBetween(fromISO, toISO) {
+    if (!fromISO) return state.sessions;
+    return state.sessions.filter(function (item) {
+      return item.date >= fromISO && item.date <= toISO;
+    });
   }
 
-  function averagePerStudyDay() {
+  function averageSession(fromISO, toISO) {
+    var list = sessionsBetween(fromISO, toISO);
+    if (!list.length) return null;
+    var minutes = fromISO ? studyBetween(fromISO, toISO) : studyMinutes();
+    return minutes / list.length;
+  }
+
+  function averagePerStudyDay(fromISO, toISO) {
     var days = {};
-    state.sessions.forEach(function (item) { days[item.date] = true; });
+    sessionsBetween(fromISO, toISO).forEach(function (item) { days[item.date] = true; });
     var count = Object.keys(days).length;
     if (!count) return null;
-    return studyMinutes() / count;
+    var minutes = fromISO ? studyBetween(fromISO, toISO) : studyMinutes();
+    return minutes / count;
   }
 
   function averagePerWeek() {
@@ -640,6 +669,7 @@
     completionRate: completionRate,
     studyMinutes: studyMinutes,
     studyBetween: studyBetween,
+    periodRange: periodRange,
     thisWeekMinutes: thisWeekMinutes,
     tasksDueOn: tasksDueOn,
     eventsOn: eventsOn,
