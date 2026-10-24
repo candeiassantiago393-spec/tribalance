@@ -210,10 +210,13 @@
       return shell("Registar estudo", '<p>Cria uma cadeira para associares o tempo de estudo.</p><div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-primary" data-action="open-course">Nova cadeira</button></div></div>');
     }
     var courseId = UI.modal.courseId || Store.activeCourses()[0].id;
+    var now = new Date();
+    var nowTime = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
     var body = (
       '<form id="form-session">' +
       field("Cadeira", '<select name="courseId">' + courseOptions(courseId) + "</select>") +
       field("Data", '<input type="date" name="date" required value="' + H.todayISO() + '">') +
+      field("Hora", '<input type="time" name="time" required value="' + nowTime + '">', "A hora em que estudaste, para ficar no histórico.") +
       field("Duração (minutos)", '<input id="session-minutes" name="minutes" type="number" min="5" max="720" step="5" required value="60">') +
       '<div class="presets"><button type="button" data-action="set-minutes" data-minutes="30">30 min</button><button type="button" data-action="set-minutes" data-minutes="45">45 min</button><button type="button" data-action="set-minutes" data-minutes="60">1 h</button><button type="button" data-action="set-minutes" data-minutes="90">1 h 30</button><button type="button" data-action="set-minutes" data-minutes="120">2 h</button></div>' +
       '<div class="modal-actions"><div></div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Registar</button></div></div></form>'

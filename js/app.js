@@ -7,6 +7,7 @@
     calendar: "calendario",
     grades: "notas",
     stats: "estatisticas",
+    study: "estudo",
     reminders: "lembretes",
     archive: "arquivo",
     customize: "personalizar",
@@ -23,6 +24,7 @@
       calendar: "Calendário",
       grades: "Notas",
       stats: "Estatísticas",
+      study: "Estudo",
       reminders: "Lembretes",
       archive: H.term("arquivo"),
       customize: "Personalizar",
@@ -486,11 +488,14 @@
 
   function saveSession(form) {
     var minutes = H.readNumber(val(form, "minutes"));
+    var time = val(form, "time");
     if (Number.isNaN(minutes) || minutes < 5 || minutes > 720) return toast("A duração deve estar entre 5 minutos e 12 horas.");
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return toast("Indica a hora do estudo.");
     Store.saveSession({
       id: H.uid(),
       courseId: val(form, "courseId"),
       date: val(form, "date") || H.todayISO(),
+      time: time,
       minutes: Math.round(minutes),
     });
     UI.modal = null;

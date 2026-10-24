@@ -520,7 +520,7 @@
       '</section><section class="card"><header class="card-head"><h2>Sessões recentes</h2></header>' +
       (recent.length ? '<div class="session-list">' + recent.map(function (session) {
         var course = Store.course(session.courseId);
-        return '<div class="session-row"><div>' + courseDot(course) + "<strong>" + H.esc(course ? course.name : "Cadeira removida") + "</strong><small>" + H.esc(H.formatShort(session.date)) + "</small></div><span>" + H.esc(H.formatMinutes(session.minutes)) + '</span><button type="button" class="icon-btn" data-action="ask-delete" data-entity="session" data-id="' + session.id + '" aria-label="Eliminar sessão">' + Icons.ui("trash") + "</button></div>";
+        return '<div class="session-row"><div>' + courseDot(course) + "<strong>" + H.esc(course ? course.name : "Cadeira removida") + "</strong><small>" + H.esc(H.formatShort(session.date) + (session.time ? " · " + session.time : "")) + "</small></div><span>" + H.esc(H.formatMinutes(session.minutes)) + '</span><button type="button" class="icon-btn" data-action="ask-delete" data-entity="session" data-id="' + session.id + '" aria-label="Eliminar sessão">' + Icons.ui("trash") + "</button></div>";
       }).join("") + "</div>" : '<p class="muted">As sessões que registares ficam listadas aqui.</p>') +
       "</section></div></section>"
     );
@@ -732,6 +732,36 @@
     );
   }
 
+  function studyLog() {
+    var sessions = Store.state.sessions.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (a.time || "") < (b.time || "") ? 1 : -1;
+    });
+    var total = sessions.reduce(function (sum, item) { return sum + item.minutes; }, 0);
+    var groups = [];
+    sessions.forEach(function (session) {
+      var last = groups[groups.length - 1];
+      if (!last || last.date !== session.date) groups.push({ date: session.date, items: [session] });
+      else last.items.push(session);
+    });
+    var body = groups.map(function (group) {
+      var dayMinutes = group.items.reduce(function (sum, item) { return sum + item.minutes; }, 0);
+      var rows = group.items.map(function (session) {
+        var course = Store.course(session.courseId);
+        return '<div class="session-row"><div>' + courseDot(course) + "<strong>" + H.esc(course ? course.name : "Cadeira removida") + "</strong><small>" + H.esc(session.time || "Sem hora") + "</small></div><span>" + H.esc(H.formatMinutes(session.minutes)) + '</span><button type="button" class="icon-btn" data-action="ask-delete" data-entity="session" data-id="' + session.id + '" aria-label="Eliminar registo de estudo">' + Icons.ui("trash") + "</button></div>";
+      }).join("");
+      return '<section class="card"><header class="card-head"><h2>' + H.esc(H.formatLong(group.date)) + '</h2><span class="muted">' + H.esc(H.formatMinutes(dayMinutes)) + "</span></header><div class=\"session-list\">" + rows + "</div></section>";
+    }).join("");
+    return (
+      '<section class="page"><header class="page-head"><div><p class="eyebrow">Histórico</p><h1>Estudo</h1><p class="lede">Todos os registos, com a hora em que estudaste. Se um estiver errado, podes eliminá-lo.</p></div>' +
+      '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-session">' + Icons.ui("study") + "Registar estudo</button></div></header>" +
+      (sessions.length
+        ? '<p class="lede tight">Total registado: ' + H.esc(H.formatHours(total)) + " h em " + H.esc(H.countLabel(sessions.length, "sessão", "sessões")) + ".</p><div class=\"stack\">" + body + "</div>"
+        : empty("Ainda não há estudo registado", "Quando registares uma sessão, ela fica aqui com a data e a hora.", "open-session", "Registar estudo")) +
+      "</section>"
+    );
+  }
+
   function customize() {
     var types = H.TERMS.filter(function (item) { return item.group === "tipos"; });
     var names = H.TERMS.filter(function (item) { return item.group === "nomes"; });
@@ -757,6 +787,7 @@
     calendar: calendar,
     grades: grades,
     stats: stats,
+    study: studyLog,
     reminders: reminders,
     archive: archive,
     customize: customize,

@@ -347,10 +347,12 @@
       };
     });
     data.sessions = (data.sessions || []).map(function (item) {
+      var time = String(item.time || "");
       return {
         id: item.id || H.uid(),
         courseId: item.courseId || "",
         date: item.date || H.todayISO(),
+        time: /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : "",
         minutes: Math.max(0, Number(item.minutes) || 0),
       };
     });
