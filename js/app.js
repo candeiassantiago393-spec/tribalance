@@ -63,6 +63,13 @@
 
   var toastTimer = 0;
 
+  function stageLabel(stage) {
+    if (stage === "feita") return "Tarefa concluída.";
+    if (stage === "curso") return "Tarefa em curso.";
+    if (stage === "bloqueada") return "Tarefa bloqueada.";
+    return "Tarefa por fazer.";
+  }
+
   function toast(message) {
     var el = document.getElementById("toast");
     el.textContent = message;
@@ -271,6 +278,20 @@
       if (!dueDate) return toast("Indica o dia da tarefa.");
       startDate = dueDate;
     }
+    var checkTexts = form.querySelectorAll('[name="checkText"]');
+    var checkIds = form.querySelectorAll('[name="checkId"]');
+    var checkDones = form.querySelectorAll('[name="checkDone"]');
+    var checks = [];
+    for (var c = 0; c < checkTexts.length; c++) {
+      var checkText = checkTexts[c].value.trim();
+      if (!checkText) continue;
+      checks.push({
+        id: (checkIds[c] && checkIds[c].value) || H.uid(),
+        text: checkText,
+        done: Boolean(checkDones[c] && checkDones[c].value === "1"),
+      });
+    }
+    var keptStage = existing && (existing.stage === "curso" || existing.stage === "bloqueada") ? existing.stage : "fazer";
     Store.saveTask({
       id: existing ? existing.id : H.uid(),
       title: title,
@@ -284,13 +305,14 @@
       dates: dates,
       dueTime: val(form, "dueTime"),
       notes: val(form, "notes").trim(),
+      checks: checks,
       etapaId: (function () {
         var etapaId = val(form, "etapaId");
         var owner = Store.project(projectId);
         if (!owner || !(owner.stages || []).some(function (stage) { return stage.id === etapaId; })) return "";
         return etapaId;
       })(),
-      stage: done ? "feita" : (existing && existing.stage === "curso" ? "curso" : "fazer"),
+      stage: done ? "feita" : keptStage,
       done: done,
       doneAt: done ? ((existing && existing.doneAt) || H.todayISO()) : null,
       reminders: reminders,
@@ -694,6 +716,11 @@
       render();
       return;
     }
+    if (action === "toggle-task-check") {
+      Store.toggleTaskCheck(el.dataset.id, el.dataset.check);
+      render();
+      return;
+    }
     if (action === "archive-item") {
       Store.archiveItem(el.dataset.id, true);
       toast("Item arquivado.");
@@ -926,7 +953,7 @@
     }
     if (target.matches("[data-stage-for]")) {
       var moved = Store.setTaskStage(target.dataset.stageFor, target.value);
-      if (moved) toast(moved.stage === "feita" ? "Tarefa concluída." : moved.stage === "curso" ? "Tarefa em curso." : "Tarefa por fazer.");
+      if (moved) toast(stageLabel(moved.stage));
       render();
       return;
     }
@@ -1000,7 +1027,7 @@
     event.preventDefault();
     var id = event.dataTransfer.getData("text/plain");
     var moved = Store.setTaskStage(id, col.dataset.stage);
-    if (moved) toast(moved.stage === "feita" ? "Tarefa concluída." : moved.stage === "curso" ? "Tarefa em curso." : "Tarefa por fazer.");
+    if (moved) toast(stageLabel(moved.stage));
     render();
   });
 

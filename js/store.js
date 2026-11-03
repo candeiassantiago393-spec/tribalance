@@ -304,10 +304,17 @@
         startDate = dueDate;
         dates = [];
       }
-      var stage = item.stage === "fazer" || item.stage === "curso" || item.stage === "feita"
+      var stage = item.stage === "fazer" || item.stage === "curso" || item.stage === "bloqueada" || item.stage === "feita"
         ? item.stage
         : (item.done ? "feita" : "fazer");
       var done = stage === "feita";
+      var checks = (Array.isArray(item.checks) ? item.checks : []).map(function (entry) {
+        return {
+          id: (entry && entry.id) || H.uid(),
+          text: ((entry && entry.text) || "").trim(),
+          done: Boolean(entry && entry.done),
+        };
+      }).filter(function (entry) { return entry.text; });
       return {
         id: item.id || H.uid(),
         title: item.title || "Tarefa",
@@ -326,6 +333,7 @@
         doneAt: done ? (item.doneAt || item.dueDate || dueDate) : null,
         reminders: Array.isArray(item.reminders) ? item.reminders.map(Number) : [1, 7],
         notes: item.notes || "",
+        checks: checks,
         archived: Boolean(item.archived),
         archiveGradeId: item.archiveGradeId || "",
       };
@@ -731,6 +739,14 @@
       item.archived = archived !== false;
       save();
     },
+    toggleTaskCheck: function (taskId, checkId) {
+      var task = state.tasks.filter(function (entry) { return entry.id === taskId; })[0];
+      if (!task || task.archived) return;
+      (task.checks || []).forEach(function (entry) {
+        if (entry.id === checkId) entry.done = !entry.done;
+      });
+      save();
+    },
     toggleCheck: function (itemId, checkId) {
       var item = state.items.filter(function (entry) { return entry.id === itemId; })[0];
       if (!item) return;
@@ -762,7 +778,7 @@
     setTaskStage: function (id, stage) {
       var item = state.tasks.filter(function (task) { return task.id === id; })[0];
       if (!item || item.archived) return null;
-      if (stage !== "fazer" && stage !== "curso" && stage !== "feita") return null;
+      if (stage !== "fazer" && stage !== "curso" && stage !== "bloqueada" && stage !== "feita") return null;
       item.stage = stage;
       item.done = stage === "feita";
       item.doneAt = item.done ? (item.doneAt || H.todayISO()) : null;

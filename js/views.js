@@ -27,19 +27,40 @@
     );
   }
 
+  function taskStage(task) {
+    if (task.stage === "curso" || task.stage === "bloqueada" || task.stage === "feita") return task.stage;
+    return "fazer";
+  }
+
+  function taskChecks(task) {
+    var checks = task.checks || [];
+    if (!checks.length) return "";
+    var done = checks.filter(function (entry) { return entry.done; }).length;
+    return (
+      '<p class="task-progress">' + done + " de " + checks.length + "</p>" +
+      '<ul class="task-checks">' + checks.map(function (entry) {
+        return '<li><button type="button" class="check' + (entry.done ? " is-on" : "") + '" data-action="toggle-task-check" data-id="' + task.id + '" data-check="' + entry.id + '" aria-label="Marcar tópico">' + Icons.ui("check") + '</button><span' + (entry.done ? ' class="is-done"' : "") + ">" + H.esc(entry.text) + "</span></li>";
+      }).join("") + "</ul>"
+    );
+  }
+
   function taskRow(task) {
     var course = Store.course(task.courseId);
     var overdue = H.isOverdue(task);
+    var blocked = taskStage(task) === "bloqueada";
     var classes = ["task"];
     if (task.done) classes.push("is-done");
     if (overdue) classes.push("is-overdue");
+    if (blocked) classes.push("is-blocked");
     return (
       '<article class="' + classes.join(" ") + '">' +
       '<button type="button" class="check' + (task.done ? " is-on" : "") + '" data-action="toggle-task" data-id="' + task.id + '" aria-label="' + (task.done ? "Marcar como pendente" : "Marcar como concluída") + '">' + Icons.ui("check") + "</button>" +
       '<div class="task-main">' +
       '<div class="task-line"><h3 class="task-title">' + H.esc(task.title) + "</h3>" +
-      '<span class="badge badge-' + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span></div>" +
+      '<span class="badge badge-' + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span>" +
+      (blocked ? '<span class="badge badge-blocked">Bloqueada</span>' : "") + "</div>" +
       '<p class="task-meta">' + courseDot(course) + "<span>" + H.esc(placeText(task)) + "</span><span>·</span><span>" + H.esc(H.typeLabel(task.type)) + "</span><span>·</span><span class=\"" + (overdue ? "danger" : "") + '">' + H.esc(H.relativeDue(task)) + "</span></p>" +
+      taskChecks(task) +
       "</div>" +
       '<div class="task-actions">' +
       (task.done && !task.archived ? '<button type="button" class="btn btn-ghost btn-sm" data-action="open-archive" data-id="' + task.id + '">Arquivar</button>' : "") +
@@ -214,19 +235,21 @@
   function kanbanCard(task) {
     var course = Store.course(task.courseId);
     var overdue = H.isOverdue(task);
-    var stage = task.stage === "curso" || task.stage === "feita" ? task.stage : "fazer";
+    var stage = taskStage(task);
     var options = [
       { id: "fazer", label: "Por fazer" },
       { id: "curso", label: "Em curso" },
+      { id: "bloqueada", label: "Bloqueada" },
       { id: "feita", label: "Concluída" },
     ].map(function (option) {
       return '<option value="' + option.id + '"' + (option.id === stage ? " selected" : "") + ">" + option.label + "</option>";
     }).join("");
     return (
-      '<article class="kanban-card' + (task.done ? " is-done" : "") + (overdue ? " is-overdue" : "") + '" draggable="true" data-id="' + task.id + '">' +
+      '<article class="kanban-card' + (task.done ? " is-done" : "") + (overdue ? " is-overdue" : "") + (stage === "bloqueada" ? " is-blocked" : "") + '" draggable="true" data-id="' + task.id + '">' +
       '<div class="task-line"><h3 class="task-title">' + H.esc(task.title) + "</h3>" +
       '<span class="badge badge-' + H.esc(task.priority) + '">' + H.esc(H.priorityLabel(task.priority)) + "</span></div>" +
       '<p class="task-meta">' + courseDot(course) + "<span>" + H.esc(placeText(task)) + "</span><span>·</span><span>" + H.esc(H.typeLabel(task.type)) + "</span><span>·</span><span class=\"" + (overdue ? "danger" : "") + '">' + H.esc(H.relativeDue(task)) + "</span></p>" +
+      taskChecks(task) +
       '<div class="kanban-foot"><select data-stage-for="' + task.id + '" aria-label="Mover ' + H.esc(task.title) + '">' + options + "</select>" +
       '<div class="task-actions">' +
       (task.done ? '<button type="button" class="btn btn-ghost btn-sm" data-action="open-archive" data-id="' + task.id + '">Arquivar</button>' : "") +
@@ -240,12 +263,12 @@
     var columns = [
       { id: "fazer", title: "Por fazer" },
       { id: "curso", title: "Em curso" },
+      { id: "bloqueada", title: "Bloqueadas" },
       { id: "feita", title: "Concluídas" },
     ];
     return '<div class="kanban">' + columns.map(function (column) {
       var cards = tasks.filter(function (task) {
-        var stage = task.stage === "curso" || task.stage === "feita" ? task.stage : "fazer";
-        return stage === column.id;
+        return taskStage(task) === column.id;
       });
       return (
         '<section class="kanban-col" data-stage="' + column.id + '">' +
@@ -269,7 +292,8 @@
       if (filter.priority !== "all" && task.priority !== filter.priority) return false;
       if (filter.type !== "all" && task.type !== filter.type) return false;
       if (filter.q) {
-        var hay = (task.title + " " + (task.notes || "")).toLowerCase();
+        var topics = (task.checks || []).map(function (entry) { return entry.text; }).join(" ");
+        var hay = (task.title + " " + (task.notes || "") + " " + topics).toLowerCase();
         if (hay.indexOf(filter.q.toLowerCase()) < 0) return false;
       }
       return true;
@@ -295,7 +319,7 @@
         return '<option value="' + type.id + '">' + H.esc(H.term(type.id)) + "</option>";
       }).join("")) +
       "</div>" +
-      (kanban ? '<p class="hint kanban-hint">Arrasta um cartão para outra coluna, ou escolhe a coluna no próprio cartão.</p>' : "") +
+      (kanban ? '<p class="hint kanban-hint">Arrasta um cartão para outra coluna, incluindo Bloqueadas, ou escolhe a coluna no próprio cartão.</p>' : "") +
       (kanban
         ? (filtered.length ? kanbanBoard(filtered) : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa."))
         : (filtered.length ? '<div class="task-list">' + filtered.map(taskRow).join("") + "</div>" : empty("Nada para mostrar", "Não há tarefas com estes filtros. Cria uma nova ou alarga a pesquisa."))) +

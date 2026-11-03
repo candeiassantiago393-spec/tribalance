@@ -135,6 +135,7 @@
       when: "unico",
       dueTime: "",
       notes: "",
+      checks: [],
       done: false,
       reminders: Store.state.settings.defaultReminders.slice(),
     };
@@ -173,6 +174,7 @@
       field("Hora", '<input type="time" name="dueTime" value="' + H.esc(task.dueTime || "") + '">', "Opcional. Sem hora, o prazo acaba no fim do dia.") +
       '<div class="field"><span>Alertas</span><div class="check-grid">' + checks + "</div></div>" +
       field("Notas", '<textarea name="notes" maxlength="500" placeholder="Detalhes, capítulos, colegas de grupo…">' + H.esc(task.notes || "") + "</textarea>") +
+      '<div class="field"><span>Checklist</span><div id="check-list">' + (task.checks || []).map(checkRow).join("") + '</div><button type="button" class="btn btn-ghost btn-sm" data-action="add-check">Adicionar tópico</button><small class="hint">Por exemplo os capítulos de Cálculo I. Depois marcas cada tópico na lista ou no Kanban.</small></div>' +
       '<label class="checkline"><input type="checkbox" name="done"' + (task.done ? " checked" : "") + "><span>Marcar como concluída</span></label>" +
       '<div class="modal-actions"><div>' + (existing ? '<button type="button" class="btn btn-danger btn-sm" data-action="ask-delete" data-entity="task" data-id="' + existing.id + '">Eliminar</button>' : "") + '</div><div class="right"><button type="button" class="btn btn-ghost" data-action="close-modal" data-dismiss>Cancelar</button><button type="submit" class="btn btn-primary">Guardar</button></div></div></form>'
     );
@@ -325,9 +327,9 @@
   }
 
   function checkRow(item) {
-    item = item || { text: "" };
+    item = item || { id: "", text: "", done: false };
     return (
-      '<div class="date-row"><input name="checkText" maxlength="120" value="' + H.esc(item.text || "") + '" placeholder="Ponto da lista"><button type="button" class="icon-btn" data-action="remove-date" aria-label="Remover ponto">' + Icons.ui("close") + "</button></div>"
+      '<div class="date-row"><input type="hidden" name="checkId" value="' + H.esc(item.id || "") + '"><input type="hidden" name="checkDone" value="' + (item.done ? "1" : "0") + '"><input name="checkText" maxlength="120" value="' + H.esc(item.text || "") + '" placeholder="Ex.: Limites"><button type="button" class="icon-btn" data-action="remove-date" aria-label="Remover tópico">' + Icons.ui("close") + "</button></div>"
     );
   }
 
