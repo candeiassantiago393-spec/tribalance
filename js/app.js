@@ -57,6 +57,7 @@
     projectId: "",
     projectFilter: "tudo",
     statsPeriod: "semestre",
+    statsOffset: 0,
     calMode: "month",
     calDate: new Date(),
   };
@@ -708,6 +709,17 @@
     }
     if (action === "stats-period") {
       UI.statsPeriod = el.dataset.period || "semestre";
+      UI.statsOffset = 0;
+      render();
+      return;
+    }
+    if (action === "stats-shift") {
+      var step = Number(el.dataset.step) || 0;
+      var limit = Number(el.dataset.limit);
+      var nextOffset = (UI.statsOffset || 0) + step;
+      if (nextOffset < 0) nextOffset = 0;
+      if (!Number.isNaN(limit) && nextOffset > limit) nextOffset = limit;
+      UI.statsOffset = nextOffset;
       render();
       return;
     }

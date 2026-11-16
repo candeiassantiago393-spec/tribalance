@@ -500,16 +500,21 @@
     }, 0);
   }
 
-  function periodRange(period) {
+  function periodRange(period, anchor) {
     var today = new Date();
+    var base = anchor || today;
     if (period === "semana") {
-      var start = H.startOfWeek(today);
-      return { id: "semana", from: H.toISODate(start), to: H.toISODate(H.addDays(start, 6)), label: "esta semana" };
+      var start = H.startOfWeek(base);
+      var from = H.toISODate(start);
+      var current = H.toISODate(H.startOfWeek(today));
+      return { id: "semana", from: from, to: H.toISODate(H.addDays(start, 6)), label: from === current ? "esta semana" : H.weekTitle(start) };
     }
     if (period === "mes") {
-      var first = new Date(today.getFullYear(), today.getMonth(), 1, 12);
-      var last = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
-      return { id: "mes", from: H.toISODate(first), to: H.toISODate(last), label: "este mês" };
+      var first = new Date(base.getFullYear(), base.getMonth(), 1, 12);
+      var last = new Date(base.getFullYear(), base.getMonth() + 1, 0, 12);
+      var fromMonth = H.toISODate(first);
+      var currentMonth = H.toISODate(new Date(today.getFullYear(), today.getMonth(), 1, 12));
+      return { id: "mes", from: fromMonth, to: H.toISODate(last), label: fromMonth === currentMonth ? "este mês" : H.monthTitle(first) };
     }
     return {
       id: "semestre",

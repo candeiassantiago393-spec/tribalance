@@ -462,9 +462,25 @@
     );
   }
 
+  function statsHistoryLimit(period) {
+    var today = new Date();
+    var start = H.parseISODate(Store.state.settings.semesterStart);
+    if (period === "semana") {
+      return Math.max(0, Math.round((H.startOfWeek(today).getTime() - H.startOfWeek(start).getTime()) / (7 * 86400000)));
+    }
+    if (period === "mes") {
+      return Math.max(0, (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth()));
+    }
+    return 0;
+  }
+
   function stats() {
     var period = UI.statsPeriod === "semana" || UI.statsPeriod === "mes" ? UI.statsPeriod : "semestre";
-    var range = Store.periodRange(period);
+    var offset = period === "semestre" ? 0 : Math.max(0, UI.statsOffset || 0);
+    var anchor = null;
+    if (period === "semana" && offset) anchor = H.addDays(new Date(), -7 * offset);
+    if (period === "mes" && offset) anchor = new Date(new Date().getFullYear(), new Date().getMonth() - offset, 15, 12);
+    var range = anchor ? Store.periodRange(period, anchor) : Store.periodRange(period);
     var rate = Store.completionRate();
     var days = Store.weekdayStudy(range.from, range.to).slice().sort(function (a, b) { return b.minutes - a.minutes; });
     var maxDay = days.reduce(function (max, day) { return Math.max(max, day.minutes); }, 0);
@@ -514,15 +530,22 @@
       return '<button type="button" class="chip-btn' + (item.id === period ? " is-selected" : "") + '" data-action="stats-period" data-period="' + item.id + '">' + item.label + "</button>";
     }).join("");
     var periodHint = period === "semana"
-      ? "segunda a domingo"
+      ? (offset ? H.weekTitle(H.parseISODate(range.from)) : "segunda a domingo")
       : period === "mes"
-        ? H.monthTitle(new Date())
+        ? H.monthTitle(H.parseISODate(range.from))
         : "de " + H.formatShort(range.from) + " a " + H.formatShort(range.to);
+    var historyLimit = statsHistoryLimit(period);
+    var pager = period === "semestre" ? "" : (
+      '<div class="cal-nav stats-pager">' +
+      '<button type="button" class="icon-btn flip" data-action="stats-shift" data-step="1" data-limit="' + historyLimit + '"' + (offset >= historyLimit ? " disabled" : "") + ' aria-label="Período anterior">' + Icons.ui("chevron") + "</button>" +
+      "<strong>" + H.esc(period === "semana" ? H.weekTitle(H.parseISODate(range.from)) : H.monthTitle(H.parseISODate(range.from))) + "</strong>" +
+      '<button type="button" class="icon-btn" data-action="stats-shift" data-step="-1" data-limit="' + historyLimit + '"' + (offset <= 0 ? " disabled" : "") + ' aria-label="Período seguinte">' + Icons.ui("chevron") + "</button></div>"
+    );
 
     return (
       '<section class="page"><header class="page-head"><div><p class="eyebrow">Produtividade</p><h1>Estatísticas</h1><p class="lede">O painel mostra só a semana em curso. Aqui vês a semana, o mês ou o semestre inteiro.</p></div>' +
       '<div class="page-actions"><button type="button" class="btn btn-primary" data-action="open-session">' + Icons.ui("study") + "Registar estudo</button></div></header>" +
-      '<div class="chip-row">' + periodButtons + "</div>" +
+      '<div class="chip-row">' + periodButtons + pager + "</div>" +
       '<div class="kpis">' +
       kpi("Horas no período", H.formatHours(periodMinutes) + " h", periodHint, "") +
       kpi("Tempo médio por sessão", Store.averageSession(range.from, range.to) == null ? "—" : H.formatMinutes(Store.averageSession(range.from, range.to)), periodSessions.length ? H.countLabel(periodSessions.length, "sessão neste período", "sessões neste período") : "sem sessões", "") +
